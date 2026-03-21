@@ -7,7 +7,8 @@ const CONFIG = {
 }
 
 app.post("/webHook", (req, res) => {
-    console.log(req.body);
+
+    console.log(req.body.password);
     res.send("ok");
 })
 
