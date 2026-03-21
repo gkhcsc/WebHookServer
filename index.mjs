@@ -6,7 +6,7 @@ const CONFIG = {
     port:8000
 }
 
-app.post("/", (req, res) => {
+app.post("/webHook", (req, res) => {
     console.log(req.body);
     res.send("ok");
 })
