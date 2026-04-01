@@ -1,4 +1,8 @@
 {
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs"
+  },
   "dependencies": {
     "express": "^5.2.1",
     "winston": "^3.19.0"
