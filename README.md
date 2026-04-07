@@ -1,4 +1,66 @@
-### gitee webhook 钩子
+## **项目简介**
+
+- **描述**: 本项目是一个轻量的 Gitee/Git webhook 处理服务（基于 Node.js + Express），用于接收仓库的 push / pull request 等事件并按 `config.json` 中配置执行对应脚本。
+- **主要用途**: 自动触发构建/部署脚本、接收仓库事件并记录日志。
+
+**先决条件**
+
+- **Node.js**: 建议使用 Node.js 16+（本项目使用 ES 模块 `.mjs`）。
+- **系统权限**: 若脚本在 `config.json` 中调用系统命令，请确保运行用户对相关脚本/目录有执行权限。
+
+## **安装**
+
+- 克隆或拷贝本项目后，在项目根目录运行:
+
+```bash
+npm install
+```
+
+## **配置说明**
+
+- 配置文件: `config.json`（项目根）。主要字段说明：
+  - `server.port`: 服务监听端口（默认 `8000`）。
+  - `server.secret`: 与 Gitee 钩子配置的密码/密钥，对请求签名进行校验。
+  - `server.allowIps`: 可选，允许访问的 IP 列表。
+  - `projects`: 仓库列表，每项包含 `name`（仓库全名）、`branches`、`events`、`scripts`（按事件触发的命令数组，支持 `cmd` 和可选 `cwd`）。
+  - `logging`: 日志配置，包含 `file`（默认 `./logs/webhook.log`）、`level` 等。
+
+  示例见当前 `config.json`，按需添加或修改项目条目。
+
+## **运行**
+
+- 开发 / 生产启动:
+
+```bash
+npm start
+# 或
+node index.mjs
+```
+
+- 启动后，服务会在 `server.port` 指定的端口监听来自 Gitee 的 webhook 请求。
+
+## **日志与目录**
+
+- 日志默认写入到 `./logs/webhook.log`（可在 `config.json.logging.file` 中修改）。
+- 主要源文件：
+  - `index.mjs` — 程序入口。
+  - `config.mjs` — 配置加载与合并逻辑（位于 `lib/`）。
+  - `handlers.mjs` — 事件处理器实现（位于 `lib/`）。
+  - `runner.mjs` — 外部命令执行器（位于 `lib/`）。
+  - `logger.mjs` — 日志封装（位于 `lib/`）。
+
+## **添加项目/脚本示例**
+
+- 在 `config.json.projects` 中添加新对象，定义 `name`、目标 `branches`、要监听的 `events`，以及 `scripts` 列表，其中 `scripts` 中的每一项包含 `event`、可选的 `branch`、`cmd` 与可选 `cwd`。
+
+## **安全说明**
+
+- 请务必设置 `server.secret` 并在 Gitee 钩子配置中使用相同密码，以避免未授权请求触发脚本。
+- 若对公网开放，请配合 `allowIps` 限制来源 IP 或放置在受控网络中。
+
+
+
+## gitee webhook 钩子
 
 来源：https://help.gitee.com/webhook/gitee-webhook-push-data-type
 
@@ -34,6 +96,8 @@
 ```
 
 #### Pull Request Hook 数据格式
+
+
 
 ```json
 {
