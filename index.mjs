@@ -6,11 +6,12 @@ import { createWebhookHandler } from './lib/handlers.mjs';
 
 const config = loadConfig();
 const logger = createLogger(config.logging);
+const runner = createRunner(logger, { timeoutMs: 5 * 60 * 1000 });
 const app = express();
 
 app.use(express.json({ limit: '1mb' }));
 
-const runner = createRunner(logger, { timeoutMs: 5 * 60 * 1000 });
+
 const webhookHandler = createWebhookHandler({ config, logger, runner });
 
 app.get('/health', (req, res) => {
