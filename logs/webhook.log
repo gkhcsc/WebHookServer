@@ -19,3 +19,17 @@
 {"level":"info","message":"Control API server running on 127.0.0.1:18081","timestamp":"2026-04-25T13:43:37.386Z"}
 {"level":"info","message":"Public webhook server running on 0.0.0.0:8000","timestamp":"2026-04-25T13:44:57.459Z"}
 {"level":"info","message":"Control API server running on 127.0.0.1:18000","timestamp":"2026-04-25T13:44:57.460Z"}
+{"level":"info","message":"Public webhook server running on 0.0.0.0:8000","timestamp":"2026-04-25T13:59:40.407Z"}
+{"level":"info","message":"Control API server running on 127.0.0.1:18000","timestamp":"2026-04-25T13:59:40.407Z"}
+{"level":"info","message":"Public webhook server running on 0.0.0.0:8000","timestamp":"2026-04-25T14:03:56.508Z"}
+{"level":"info","message":"Control API server running on 127.0.0.1:18000","timestamp":"2026-04-25T14:03:56.509Z"}
+{"level":"info","message":"Public webhook server running on 0.0.0.0:8000","timestamp":"2026-04-25T14:05:59.051Z"}
+{"level":"info","message":"Control API server running on 127.0.0.1:18000","timestamp":"2026-04-25T14:05:59.052Z"}
+{"level":"info","message":"Public webhook server running on 0.0.0.0:8000","timestamp":"2026-04-25T14:06:28.948Z"}
+{"level":"info","message":"Control API server running on 127.0.0.1:18000","timestamp":"2026-04-25T14:06:28.949Z"}
+{"level":"info","message":"Public webhook server running on 0.0.0.0:8000","timestamp":"2026-04-25T14:06:55.412Z"}
+{"level":"info","message":"Control API server running on 127.0.0.1:18000","timestamp":"2026-04-25T14:06:55.413Z"}
+{"level":"info","message":"Public webhook server running on 0.0.0.0:18130","timestamp":"2026-04-25T14:08:35.640Z"}
+{"level":"info","message":"Control API server running on 127.0.0.1:18131","timestamp":"2026-04-25T14:08:35.641Z"}
+{"level":"info","message":"Public webhook server running on 0.0.0.0:8000","timestamp":"2026-04-25T14:09:09.022Z"}
+{"level":"info","message":"Control API server running on 127.0.0.1:18000","timestamp":"2026-04-25T14:09:09.023Z"}

@@ -9,6 +9,8 @@ import { createWebhookHandler } from './lib/handlers.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const configFilePath = path.resolve(__dirname, 'config.json');
+const frontendDistPath = path.resolve(__dirname, 'frontend', 'dist');
+const frontendIndexFilePath = path.resolve(frontendDistPath, 'index.html');
 
 let config = loadConfig(configFilePath);
 const logger = createLogger(config.logging);
@@ -259,6 +261,17 @@ publicApp.get('/health', (req, res) => {
 });
 
 publicApp.post('/webHook', (req, res, next) => webhookHandler(req, res, next));
+
+if (fs.existsSync(frontendIndexFilePath)) {
+    controlApp.use(express.static(frontendDistPath));
+    controlApp.get('/{*any}', (req, res) => {
+        res.sendFile(frontendIndexFilePath);
+    });
+} else {
+    controlApp.get('/', (req, res) => {
+        res.status(503).send('frontend dist not found, run: npm run build --prefix frontend');
+    });
+}
 
 function handleError(err, req, res, next) {
     logger.error('unhandled error', { message: err.message, stack: err.stack });

@@ -31,12 +31,26 @@ npm install
 cd frontend && npm install
 ```
 
-### 2. 启动后端
+### 2. 构建前端静态文件
+
+在项目根目录执行：
+
+```bash
+npm run build:frontend
+```
+
+该命令会生成 `frontend/dist`，后端会直接托管它。
+
+### 3. 启动后端
 
 在项目根目录执行：
 
 ```bash
 node index.mjs
+# 或
+npm run start
+# 或（先构建前端，再启动后端）
+npm run serve
 ```
 
 默认端口读取 `config.json` 中的 `server.port`（默认 8000）。
@@ -52,20 +66,11 @@ node index.mjs
 CONTROL_API_PORT=19000 node index.mjs
 ```
 
-### 3. 启动前端
+### 4. 访问页面
 
-在 `frontend` 目录执行：
-
-```bash
-npm run dev
-```
-
-默认访问地址：`http://localhost:5173`
-
-前端已配置开发代理：
-
-1. `/api` -> `http://localhost:18000`（本地控制 API）
-2. `/health`、`/webHook` -> `http://localhost:8000`（公网业务端口）
+1. 控制台页面：`http://127.0.0.1:18000/`
+2. 后端公共接口：`http://localhost:8000/health`、`http://localhost:8000/webHook`
+3. 控制接口端口：`http://127.0.0.1:18000/api/*`
 
 ## 前端使用教程
 
@@ -114,7 +119,6 @@ npm run dev
 
 1. `POST /webHook`：接收 WebHook
 2. `GET /health`：健康检查
-3. `GET /health`：健康检查
 
 ### 配置与日志接口
 
