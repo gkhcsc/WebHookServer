@@ -1,139 +1,174 @@
-## **项目简介**
+# WebHook Server 使用教程
 
-- **描述**: 本项目是一个轻量的 Gitee/Git webhook 处理服务（基于 Node.js + Express），用于接收仓库的 push / pull request 等事件并按 `config.json` 中配置执行对应脚本。
-- **主要用途**: 自动触发构建/部署脚本、接收仓库事件并记录日志。
+## 项目说明
 
-**先决条件**
+这是一个基于 Node.js + Express 的 WebHook 服务，支持：
 
-- **Node.js**: 建议使用 Node.js 16+（本项目使用 ES 模块 `.mjs`）。
-- **系统权限**: 若脚本在 `config.json` 中调用系统命令，请确保运行用户对相关脚本/目录有执行权限。
+1. 接收 Gitee/Git WebHook 请求并按配置触发脚本
+2. 提供前端控制台（Vue3 + TypeScript + Element Plus）
+3. 在控制台中进行手动触发、配置编辑、日志查看
 
-## **安装**
+## 目录结构
 
-- 克隆或拷贝本项目后，在项目根目录运行:
+1. `index.mjs`：后端服务入口
+2. `config.json`：核心配置文件
+3. `lib/`：配置加载、日志、脚本执行、hook 处理模块
+4. `frontend/`：前端管理页面
+
+## 环境要求
+
+1. Node.js 18+（建议 20+）
+2. npm 9+
+
+## 快速开始
+
+### 1. 安装依赖
+
+在项目根目录执行：
 
 ```bash
 npm install
+cd frontend && npm install
 ```
 
-## **配置说明**
+### 2. 启动后端
 
-- 配置文件: `config.json`（项目根）。主要字段说明：
-  - `server.port`: 服务监听端口（默认 `8000`）。
-  - `server.secret`: 与 Gitee 钩子配置的密码/密钥，对请求签名进行校验。
-  - `server.allowIps`: 可选，允许访问的 IP 列表。
-  - `projects`: 仓库列表，每项包含 `name`（仓库全名）、`branches`、`events`、`scripts`（按事件触发的命令数组，支持 `cmd` 和可选 `cwd`）。
-  - `logging`: 日志配置，包含 `file`（默认 `./logs/webhook.log`）、`level` 等。
-
-  示例见当前 `config.json`，按需添加或修改项目条目。
-
-## **运行**
-
-- 开发 / 生产启动:
+在项目根目录执行：
 
 ```bash
-npm start
-# 或
 node index.mjs
 ```
 
-- 启动后，服务会在 `server.port` 指定的端口监听来自 Gitee 的 webhook 请求。
+默认端口读取 `config.json` 中的 `server.port`（默认 8000）。
 
-## **日志与目录**
+当前版本采用双端口策略：
 
-- 日志默认写入到 `./logs/webhook.log`（可在 `config.json.logging.file` 中修改）。
-- 主要源文件：
-  - `index.mjs` — 程序入口。
-  - `config.mjs` — 配置加载与合并逻辑（位于 `lib/`）。
-  - `handlers.mjs` — 事件处理器实现（位于 `lib/`）。
-  - `runner.mjs` — 外部命令执行器（位于 `lib/`）。
-  - `logger.mjs` — 日志封装（位于 `lib/`）。
+1. 公网业务端口（默认 `8000`）：仅用于 `webHook` 与健康检查
+2. 本地控制端口（默认 `18000`）：用于前端控制 API（配置读写、日志、手动触发等）
 
-## **添加项目/脚本示例**
+可通过环境变量修改控制端口：
 
-- 在 `config.json.projects` 中添加新对象，定义 `name`、目标 `branches`、要监听的 `events`，以及 `scripts` 列表，其中 `scripts` 中的每一项包含 `event`、可选的 `branch`、`cmd` 与可选 `cwd`。
+```bash
+CONTROL_API_PORT=19000 node index.mjs
+```
 
-## **安全说明**
+### 3. 启动前端
 
-- 请务必设置 `server.secret` 并在 Gitee 钩子配置中使用相同密码，以避免未授权请求触发脚本。
-- 若对公网开放，请配合 `allowIps` 限制来源 IP 或放置在受控网络中。
+在 `frontend` 目录执行：
 
+```bash
+npm run dev
+```
 
+默认访问地址：`http://localhost:5173`
 
-## gitee webhook 钩子
+前端已配置开发代理：
 
-来源：https://help.gitee.com/webhook/gitee-webhook-push-data-type
+1. `/api` -> `http://localhost:18000`（本地控制 API）
+2. `/health`、`/webHook` -> `http://localhost:8000`（公网业务端口）
 
-#### Push / Tag Hook 数据格式
+## 前端使用教程
+
+### 1. 控制台页
+
+路径：`/`
+
+功能：
+
+1. 查看项目概览、事件、分支、脚本映射
+2. 手动选择项目/事件/分支触发任务
+3. 查看触发结果
+
+### 2. 配置编辑页
+
+路径：`/config`
+
+功能：
+
+1. 从后端读取当前 `config.json`
+2. 直接编辑 JSON 配置
+3. 一键格式化 JSON
+4. 保存后由后端校验并热更新（校验失败会返回错误）
+
+建议流程：
+
+1. 点击“重新加载”获取最新配置
+2. 修改 JSON
+3. 点击“格式化”检查结构
+4. 点击“保存配置”提交
+
+### 3. 日志查看页
+
+路径：`/logs`
+
+功能：
+
+1. 读取后端日志文件
+2. 每条日志按 JSON 格式展示
+3. 支持按级别过滤（all/error/warn/info/debug）
+4. 支持按条数加载（最大 1000）
+
+## 后端 API 说明
+
+### 业务接口
+
+1. `POST /webHook`：接收 WebHook
+2. `GET /health`：健康检查
+3. `GET /health`：健康检查
+
+### 配置与日志接口
+
+以下控制接口运行在本地控制端口（默认 `127.0.0.1:18000`）：
+
+1. `GET /api/summary`：控制台汇总信息
+2. `GET /api/projects`：项目与脚本详情
+3. `POST /api/jobs/trigger`：手动触发任务
+4. `GET /api/config`：读取当前配置
+5. `PUT /api/config`：保存配置并热更新
+6. `GET /api/logs?limit=200`：读取日志（每条日志为一条 JSON）
+
+## config.json 关键字段
+
+1. `server.port`：服务端口
+2. `server.secret`：WebHook 密钥（必填）
+3. `server.allowIps`：允许 IP 列表
+4. `projects`：项目配置列表
+5. `projects[].scripts[]`：触发脚本映射（event/branch/cmd/cwd）
+6. `logging.file`：日志文件路径
+
+## 常见问题
+
+### 1. 后端启动报错 “server.secret 未配置”
+
+请在 `config.json` 中补充：
 
 ```json
 {
-  hook_id: self.id,                    # 钩子 id。
-  hook_url: hook_url,                  # 钩子路由。
-  hook_name: String,                   # 钩子名，固定为 push_hooks/tag_push_hooks。
-  password: String,                    # 钩子密码。eg：123456
-  timestamp: Number,                   # 触发钩子的时间戳。eg: 1576754827988
-  sign: String,                        # 钩子根据密钥计算的签名。eg: "rLEHLuZRIQHuTPeXMib9Czoq9dVXO4TsQcmQQHtjXHA="
-  ref: String,                         # 推送的分支。eg：refs/heads/master
-  before: String,                      # 推送前分支的 commit id。eg：5221c062df39e9e477ab015df22890b7bf13fbbd
-  after: String,                       # 推送后分支的 commit id。eg：1cdcd819599cbb4099289dbbec762452f006cb40
-  [total_commits_count: Number],       # 推送包含的 commit 总数。
-  [commits_more_than_ten: Boolean],    # 推送包含的 commit 总数是否大于十二。
-  created: Boolean,                    # 推送的是否是新分支。
-  deleted: Boolean,                    # 推送的是否是删除分支。
-  compare: String,                     # 推送的 commit 差异 url。eg：https://gitee.com/oschina/git-osc/compare/5221c062df39e9e477ab015df22890b7bf13fbbd...1cdcd819599cbb4099289dbbec762452f006cb40
-  commits: [*commit] || null,          # 推送的全部 commit 信息。
-  head_commit: commit,                 # 推送最前面的 commit 信息。
-  repository: *project,                # 推送的目标仓库信息。
-  project: *project,                   # 推送的目标仓库信息。
-  user_id: Number,
-  user_name: String,                   # 推送者的昵称。
-  user: *user,                         # 推送者的用户信息。
-  pusher: *user,                       # 推送者的用户信息。
-  sender: *user,                       # 推送者的用户信息。
-  enterprise: *enterprise || ull       # 推送的目标仓库所在的企业信息。
+  "server": {
+    "secret": "你的密钥"
+  }
 }
 ```
 
-#### Pull Request Hook 数据格式
+### 2. 手动触发成功但脚本没执行
 
+请检查：
 
+1. `projects[].scripts[]` 是否匹配到对应 event/branch
+2. `cmd` 和 `cwd` 是否正确
+3. 当前运行账号是否有脚本执行权限
 
-```json
-{
-  hook_id: self.id,                    # 钩子 id。
-  hook_url: hook_url,                  # 钩子路由。
-  hook_name: String,                   # 钩子名，固定为 merge_request_hooks。
-  password: String,                    # 钩子密码。eg：123456
-  timestamp: Number,                   # 触发钩子的时间戳。eg: 1576754827988
-  sign: String,                        # 钩子根据密钥计算的签名。eg: "rLEHLuZRIQHuTPeXMib9Czoq9dVXO4TsQcmQQHtjXHA="
-  action: String,                      # PR 状态。eg：open
-  pull_request: *pull_request,         # PR 的信息。
-  number: Number,                      # PR 的 id。
-  iid: Number,                         # 与上面 number 一致。
-  title: String,                       # PR 的标题。eg：这是一个 PR 标题
-  body: String || nil,                 # PR 的内容。eg：升级服务...
-  state: String,                       # PR 状态。eg：open
-  merge_status: String,                # PR 的合并状态。eg：unchecked
-  merge_commit_sha: String,            # PR 合并产生的 commit id。eg：51b1acb1b4044fcdb2ff8a75ad15a4b655101754
-  url: String,                         # PR 在 Gitee 上 url。eg：https://gitee.com/oschina/pulls/1
-  source_branch: String || null,       # PR 的源分支名。eg：fixbug
-  source_repo: {
-    project: *project,                 # PR 的源仓库信息。
-    repository: *project               # PR 的源仓库信息。
-  } || null,
-  target_branch: String,               # PR 的目标分支名。master
-  target_repo: {
-    project: *project,                 # PR 的目标仓库信息。
-    repository: *project               # PR 的目标仓库信息。
-  },
-  project: *project,                   # PR 的目标仓库信息。
-  repository: *project,                # PR 的目标仓库信息。
-  author: *user,                       # PR 的创建者信息。
-  updated_by: *user,                   # PR 的更新者信息。
-  sender: *user,                       # PR 的更新者信息。
-  target_user: *user || null,          # 被委托处理 PR 的用户信息。
-  enterprise: *enterprise || null      # PR 仓库所在的企业信息。
-}
-```
+### 3. 日志页面无数据
+
+请检查：
+
+1. `logging.file` 路径是否正确
+2. 服务是否有写日志权限
+3. 是否已产生请求日志
+
+## 安全建议
+
+1. 必须设置 `server.secret`
+2. 对公网部署时建议配置 `allowIps`
+3. 不要在配置中写入不必要的敏感命令
 

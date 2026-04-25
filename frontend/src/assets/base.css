@@ -1,0 +1,26 @@
+:root {
+  --page-bg-1: #f8fbff;
+  --page-bg-2: #eef5fd;
+  --text-main: #1f2a44;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  font-weight: normal;
+}
+
+body {
+  min-height: 100vh;
+  color: var(--text-main);
+  background: radial-gradient(circle at top right, #d8ebf9, transparent 45%),
+    linear-gradient(180deg, var(--page-bg-1), var(--page-bg-2));
+  line-height: 1.6;
+  font-family: Poppins, 'Noto Sans SC', 'PingFang SC', 'Segoe UI', sans-serif;
+  font-size: 15px;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

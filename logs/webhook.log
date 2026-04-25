@@ -1,0 +1,21 @@
+{"level":"info","message":"Server running on port 8000","timestamp":"2026-04-24T05:41:09.604Z"}
+{"level":"info","message":"Server running on port 8000","timestamp":"2026-04-24T05:47:17.904Z"}
+{"level":"info","message":"Server running on port 8000","timestamp":"2026-04-24T07:15:49.653Z"}
+{"level":"info","message":"Server running on port 8000","timestamp":"2026-04-24T07:18:04.025Z"}
+{"level":"info","message":"Server running on port 8000","timestamp":"2026-04-24T07:18:33.278Z"}
+{"cmd":"/root/ICT_service/ICTWeb/autoBuildGitCode.sh","cwd":"/root/ICT_service/ICTWeb","jobId":"1777015479628-b896","level":"info","message":"command started","timestamp":"2026-04-24T07:24:39.629Z"}
+{"branch":"master","event":"pull_request_merged","jobId":"1777015479628-b896","level":"info","message":"manual job queued","project":"wygkhcsc/officialWebsite","timestamp":"2026-04-24T07:24:39.636Z"}
+{"error":"spawn sh ENOENT","jobId":"1777015479628-b896","level":"error","message":"command error","timestamp":"2026-04-24T07:24:39.637Z"}
+{"code":-4058,"jobId":"1777015479628-b896","level":"info","message":"command finished","stderr":"","stdout":"","timestamp":"2026-04-24T07:24:39.638Z"}
+{"level":"info","message":"Server running on port 18000","timestamp":"2026-04-24T07:30:57.752Z"}
+{"level":"info","message":"Server running on port 8000","timestamp":"2026-04-24T07:31:44.133Z"}
+{"level":"info","message":"Server running on port 8000","timestamp":"2026-04-24T07:33:39.646Z"}
+{"level":"info","message":"Server running on port 8000","timestamp":"2026-04-24T07:34:14.572Z"}
+{"level":"info","message":"Server running on port 8000","timestamp":"2026-04-24T07:35:39.176Z"}
+{"level":"info","message":"Server running on port 8000","timestamp":"2026-04-24T13:39:27.188Z"}
+{"level":"info","message":"Server running on port 8000","timestamp":"2026-04-25T06:54:53.768Z"}
+{"level":"info","message":"Server running on port 8000","timestamp":"2026-04-25T13:34:35.547Z"}
+{"level":"info","message":"Public webhook server running on 0.0.0.0:18080","timestamp":"2026-04-25T13:43:37.386Z"}
+{"level":"info","message":"Control API server running on 127.0.0.1:18081","timestamp":"2026-04-25T13:43:37.386Z"}
+{"level":"info","message":"Public webhook server running on 0.0.0.0:8000","timestamp":"2026-04-25T13:44:57.459Z"}
+{"level":"info","message":"Control API server running on 127.0.0.1:18000","timestamp":"2026-04-25T13:44:57.460Z"}
