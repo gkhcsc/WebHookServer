@@ -7,8 +7,13 @@
   "projects": [
     {
       "name": "wygkhcsc/officialWebsite",
-      "branches": ["master"],
-      "events": ["pull_request_merged", "push"],
+      "branches": [
+        "master"
+      ],
+      "events": [
+        "pull_request_merged",
+        "push"
+      ],
       "scripts": [
         {
           "event": "pull_request_merged",
@@ -25,8 +30,13 @@
     },
     {
       "name": "wygkhcsc/git_test",
-      "branches": ["master"],
-      "events": ["pull_request_merged", "push"],
+      "branches": [
+        "master"
+      ],
+      "events": [
+        "pull_request_merged",
+        "push"
+      ],
       "scripts": [
         {
           "event": "pull_request_merged",
@@ -43,7 +53,10 @@
       ]
     },
     {
-      "name": "wygkhcsc/ICTServer"
+      "name": "wygkhcsc/ICTServer",
+      "branches": [],
+      "events": [],
+      "scripts": []
     }
   ],
   "logging": {

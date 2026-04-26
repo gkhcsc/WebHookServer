@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { fetchConfig, saveConfig } from '@/api/webhook'
+import { exportConfigFile, exportLogFile, fetchConfig, saveConfig } from '@/api/webhook'
 
 interface EditableScript {
   event: string
@@ -11,6 +11,8 @@ interface EditableScript {
 }
 
 interface EditableProject {
+  uid: string
+  isDeleted: boolean
   name: string
   branches: string[]
   events: string[]
@@ -37,7 +39,25 @@ const saving = ref(false)
 const editorText = ref('')
 const activeTab = ref('form')
 const activeFormSection = ref('server')
+const activeProjectPanels = ref<string[]>([])
 const addProjectDialogVisible = ref(false)
+let projectUidSeed = 0
+
+const eventOptions = [
+  { label: 'push', value: 'push' },
+  { label: 'pull_request_merged', value: 'pull_request_merged' },
+  { label: 'issue_hooks', value: 'issue_hooks' },
+  { label: 'push_hooks', value: 'push_hooks' },
+  { label: 'tag_push_hooks', value: 'tag_push_hooks' },
+  { label: 'merge_request_hooks', value: 'merge_request_hooks' },
+  { label: 'note_hooks', value: 'note_hooks' },
+]
+
+const branchOptions = [
+  { label: 'main', value: 'main' },
+  { label: 'master', value: 'master' },
+  { label: 'develop', value: 'develop' },
+]
 
 const newProjectDraft = ref({
   name: '',
@@ -71,6 +91,8 @@ function createEmptyScript(): EditableScript {
 
 function createEmptyProject(): EditableProject {
   return {
+    uid: `project-${Date.now()}-${projectUidSeed++}`,
+    isDeleted: false,
     name: '',
     branches: [],
     events: [],
@@ -96,6 +118,8 @@ function normalizeConfig(raw: Record<string, unknown>): EditableConfig {
       const project = item as Partial<EditableProject>
       const scripts = Array.isArray(project.scripts) ? project.scripts : []
       return {
+        uid: `project-${Date.now()}-${projectUidSeed++}`,
+        isDeleted: false,
         name: String(project.name ?? ''),
         branches: Array.isArray(project.branches)
           ? project.branches.map((branch) => String(branch)).filter(Boolean)
@@ -131,6 +155,7 @@ function buildConfigPayload(): Record<string, unknown> {
       allowIps: configForm.value.server.allowIps.map((item) => item.trim()).filter(Boolean),
     },
     projects: configForm.value.projects
+      .filter((project) => !project.isDeleted)
       .map((project) => ({
         name: project.name.trim(),
         branches: project.branches.map((item) => item.trim()).filter(Boolean),
@@ -163,6 +188,17 @@ function buildConfigPayload(): Record<string, unknown> {
 function syncEditorFromForm() {
   const payload = buildConfigPayload()
   editorText.value = JSON.stringify(payload, null, 2)
+}
+
+function triggerBlobDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+  URL.revokeObjectURL(url)
 }
 
 function syncFormFromEditor() {
@@ -201,18 +237,45 @@ function confirmAddProject() {
   }
 
   configForm.value.projects.push({
+    uid: `project-${Date.now()}-${projectUidSeed++}`,
+    isDeleted: false,
     name,
     branches,
     events,
     scripts: [],
   })
+  activeProjectPanels.value = []
 
   addProjectDialogVisible.value = false
   ElMessage.success('项目已新增')
 }
 
 function removeProject(index: number) {
+  const target = configForm.value.projects[index]
+  if (!target) return
+
+  const moved = { ...target, isDeleted: true }
   configForm.value.projects.splice(index, 1)
+  configForm.value.projects.push(moved)
+  activeProjectPanels.value = []
+  ElMessage.warning('项目已移到列表底部，可点击“恢复项目”撤销')
+}
+
+function restoreProject(index: number) {
+  const target = configForm.value.projects[index]
+  if (!target) return
+  const moved = { ...target, isDeleted: false }
+  configForm.value.projects.splice(index, 1)
+
+  const firstDeletedIndex = configForm.value.projects.findIndex((item) => item.isDeleted)
+  if (firstDeletedIndex === -1) {
+    configForm.value.projects.push(moved)
+  } else {
+    configForm.value.projects.splice(firstDeletedIndex, 0, moved)
+  }
+
+  activeProjectPanels.value = []
+  ElMessage.success('项目已恢复')
 }
 
 function addScript(projectIndex: number) {
@@ -229,6 +292,7 @@ async function loadConfigData() {
     const data = await fetchConfig()
     const normalized = normalizeConfig(data.config)
     configForm.value = normalized
+    activeProjectPanels.value = []
     editorText.value = JSON.stringify(normalized, null, 2)
   } catch (error) {
     ElMessage.error('读取配置失败')
@@ -280,6 +344,28 @@ async function submitConfig() {
   }
 }
 
+async function downloadConfigExport() {
+  try {
+    const blob = await exportConfigFile()
+    triggerBlobDownload(blob, 'webhookserver-config.json')
+    ElMessage.success('配置文件导出成功')
+  } catch (error: any) {
+    const message = error?.response?.data?.message || error?.message || '导出配置文件失败'
+    ElMessage.error(message)
+  }
+}
+
+async function downloadLogExport() {
+  try {
+    const blob = await exportLogFile()
+    triggerBlobDownload(blob, 'webhookserver.log')
+    ElMessage.success('日志文件导出成功')
+  } catch (error: any) {
+    const message = error?.response?.data?.message || error?.message || '导出日志文件失败'
+    ElMessage.error(message)
+  }
+}
+
 async function submitFormConfig() {
   syncEditorFromForm()
   await submitConfig()
@@ -317,7 +403,12 @@ loadConfigData()
                 <el-input-number v-model="configForm.server.port" :min="1" :max="65535" style="width: 100%" />
               </el-form-item>
               <el-form-item label="密钥 server.secret">
-                <el-input v-model="configForm.server.secret" placeholder="请输入 webhook 密钥" />
+                <el-input
+                  v-model="configForm.server.secret"
+                  type="password"
+                  show-password
+                  placeholder="请输入 webhook 密钥"
+                />
               </el-form-item>
               <el-form-item label="允许 IP 列表 allowIps">
                 <el-select
@@ -340,82 +431,110 @@ loadConfigData()
             <el-empty v-if="!configForm.projects.length" description="暂无项目，点击“新增项目”开始配置" />
 
             <div v-else class="project-list">
-              <el-card
-                v-for="(project, pIndex) in configForm.projects"
-                :key="pIndex"
-                class="project-card"
-                shadow="never"
-              >
-                <template #header>
-                  <div class="project-card-header">
-                    <span class="project-title">{{ project.name || `未命名项目 ${pIndex + 1}` }}</span>
-                    <el-button type="danger" link @click="removeProject(pIndex)">删除项目</el-button>
-                  </div>
-                </template>
-
-                <el-form label-position="top" class="fixed-form-grid">
-                  <el-form-item label="项目名 name">
-                    <el-input v-model="project.name" placeholder="如 wygkhcsc/officialWebsite" />
-                  </el-form-item>
-                  <el-form-item label="分支 branches">
-                    <el-select
-                      v-model="project.branches"
-                      multiple
-                      filterable
-                      allow-create
-                      default-first-option
-                      placeholder="输入分支后回车新增"
-                    />
-                  </el-form-item>
-                  <el-form-item label="事件 events">
-                    <el-select
-                      v-model="project.events"
-                      multiple
-                      filterable
-                      allow-create
-                      default-first-option
-                      placeholder="输入事件后回车新增"
-                    />
-                  </el-form-item>
-                </el-form>
-
-                <div class="script-header">
-                  <span>脚本映射 scripts</span>
-                  <el-button type="primary" link @click="addScript(pIndex)">新增脚本</el-button>
-                </div>
-
-                <el-empty v-if="!project.scripts.length" description="暂无脚本" />
-
-                <div v-else class="script-list">
-                  <el-card
-                    v-for="(script, sIndex) in project.scripts"
-                    :key="`${pIndex}-${sIndex}`"
-                    class="script-card"
-                    shadow="never"
-                  >
-                    <template #header>
-                      <div class="project-card-header">
-                        <span>脚本 {{ sIndex + 1 }}</span>
-                        <el-button type="danger" link @click="removeScript(pIndex, sIndex)">删除脚本</el-button>
+              <el-collapse v-model="activeProjectPanels">
+                <el-collapse-item
+                  v-for="(project, pIndex) in configForm.projects"
+                  :key="project.uid"
+                  :name="project.uid"
+                  class="project-collapse-item"
+                >
+                  <template #title>
+                    <div class="project-card-header">
+                      <div class="project-title-wrap">
+                        <span class="project-title">{{ project.name || `未命名项目 ${pIndex + 1}` }}</span>
+                        <el-tag v-if="project.isDeleted" size="small" type="warning">已删除待恢复</el-tag>
                       </div>
-                    </template>
+                      <el-space>
+                        <el-button
+                          v-if="project.isDeleted"
+                          type="success"
+                          link
+                          @click.stop="restoreProject(pIndex)"
+                        >
+                          恢复项目
+                        </el-button>
+                        <el-button
+                          v-else
+                          type="danger"
+                          link
+                          @click.stop="removeProject(pIndex)"
+                        >
+                          删除项目
+                        </el-button>
+                      </el-space>
+                    </div>
+                  </template>
+
+                  <div class="project-card">
                     <el-form label-position="top" class="fixed-form-grid">
-                      <el-form-item label="事件 event">
-                        <el-input v-model="script.event" placeholder="如 push" />
+                      <el-form-item label="项目名 name">
+                        <el-input v-model="project.name" placeholder="如 wygkhcsc/officialWebsite" />
                       </el-form-item>
-                      <el-form-item label="分支 branch（可选）">
-                        <el-input v-model="script.branch" placeholder="如 master" />
+                      <el-form-item label="分支 branches">
+                        <el-select
+                          v-model="project.branches"
+                          multiple
+                          filterable
+                          allow-create
+                          default-first-option
+                          placeholder="输入分支后回车新增"
+                        >
+                          <el-option v-for="item in branchOptions" :key="item.value" :label="item.label" :value="item.value" />
+                        </el-select>
                       </el-form-item>
-                      <el-form-item label="执行命令 cmd">
-                        <el-input v-model="script.cmd" placeholder="请输入脚本命令" />
-                      </el-form-item>
-                      <el-form-item label="工作目录 cwd（可选）">
-                        <el-input v-model="script.cwd" placeholder="如 /root/WebHook" />
+                      <el-form-item label="事件 events">
+                        <el-select
+                          v-model="project.events"
+                          multiple
+                          filterable
+                          allow-create
+                          default-first-option
+                          placeholder="输入事件后回车新增"
+                        >
+                          <el-option v-for="item in eventOptions" :key="item.value" :label="item.label" :value="item.value" />
+                        </el-select>
                       </el-form-item>
                     </el-form>
-                  </el-card>
-                </div>
-              </el-card>
+
+                    <div class="script-header">
+                      <span>脚本映射 scripts</span>
+                      <el-button type="primary" link @click="addScript(pIndex)">新增脚本</el-button>
+                    </div>
+
+                    <el-empty v-if="!project.scripts.length" description="暂无脚本" />
+
+                    <div v-else class="script-list">
+                      <el-card
+                        v-for="(script, sIndex) in project.scripts"
+                        :key="`${pIndex}-${sIndex}`"
+                        class="script-card"
+                        shadow="never"
+                      >
+                        <template #header>
+                          <div class="project-card-header">
+                            <span>脚本 {{ sIndex + 1 }}</span>
+                            <el-button type="danger" link @click="removeScript(pIndex, sIndex)">删除脚本</el-button>
+                          </div>
+                        </template>
+                        <el-form label-position="top" class="fixed-form-grid">
+                          <el-form-item label="事件 event">
+                            <el-input v-model="script.event" placeholder="如 push" />
+                          </el-form-item>
+                          <el-form-item label="分支 branch（可选）">
+                            <el-input v-model="script.branch" placeholder="如 master" />
+                          </el-form-item>
+                          <el-form-item label="执行命令 cmd">
+                            <el-input v-model="script.cmd" placeholder="请输入脚本命令" />
+                          </el-form-item>
+                          <el-form-item label="工作目录 cwd（可选）">
+                            <el-input v-model="script.cwd" placeholder="如 /root/WebHook" />
+                          </el-form-item>
+                        </el-form>
+                      </el-card>
+                    </div>
+                  </div>
+                </el-collapse-item>
+              </el-collapse>
             </div>
           </section>
 
@@ -443,7 +562,8 @@ loadConfigData()
 
           <div class="actions">
             <el-button @click="loadConfigData" :loading="loading">重新加载</el-button>
-            <el-button @click="syncEditorFromForm">生成 JSON</el-button>
+            <el-button @click="downloadConfigExport">导出配置 JSON</el-button>
+            <el-button @click="downloadLogExport">导出日志 .log</el-button>
             <el-button type="primary" @click="submitFormConfig" :loading="saving">保存表单配置</el-button>
           </div>
         </el-tab-pane>
@@ -497,7 +617,9 @@ loadConfigData()
               allow-create
               default-first-option
               placeholder="输入分支后回车新增"
-            />
+            >
+              <el-option v-for="item in branchOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
           </el-form-item>
 
           <el-form-item label="事件 events" required>
@@ -508,7 +630,9 @@ loadConfigData()
               allow-create
               default-first-option
               placeholder="输入事件后回车新增"
-            />
+            >
+              <el-option v-for="item in eventOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
           </el-form-item>
         </el-form>
 
@@ -525,22 +649,42 @@ loadConfigData()
 .fixed-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
 }
 
 .project-header {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .project-list {
   display: grid;
-  gap: 12px;
+  gap: 8px;
+}
+
+.project-collapse-item {
+  border: 1px solid #5d7399;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f7faff;
+}
+
+.project-collapse-item :deep(.el-collapse-item__header) {
+  padding: 0 10px;
+  background: #eef4ff;
+  border-bottom: 1px solid #c8d5ef;
+}
+
+.project-collapse-item :deep(.el-collapse-item__arrow) {
+  margin: 0 8px 0 0;
+  order: -1;
+}
+
+.project-collapse-item :deep(.el-collapse-item__content) {
+  padding-bottom: 0;
 }
 
 .project-card {
-  border-radius: 12px;
-  border: 1px solid #5d7399;
-  background: #f7faff;
+  padding: 8px;
 }
 
 .project-card-header {
@@ -554,19 +698,25 @@ loadConfigData()
   color: #20345a;
 }
 
+.project-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .section-switcher {
-  margin: 8px 0 14px;
+  margin: 6px 0 10px;
 }
 
 .section-wrap {
   border: 1px solid #cfd8ea;
   background: #fcfdff;
-  border-radius: 10px;
-  padding: 14px;
+  border-radius: 8px;
+  padding: 10px;
 }
 
 .script-header {
-  margin: 4px 0 10px;
+  margin: 2px 0 6px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -575,12 +725,12 @@ loadConfigData()
 
 .script-list {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .script-card {
   background: #fafcff;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid #d6deed;
 }
 

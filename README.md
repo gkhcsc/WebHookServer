@@ -11,7 +11,7 @@
 ## 目录结构
 
 1. `index.mjs`：后端服务入口
-2. `config.json`：核心配置文件
+2. `config.json`：安装目录中的示例配置文件（首次启动会自动迁移）
 3. `lib/`：配置加载、日志、脚本执行、hook 处理模块
 4. `frontend/`：前端管理页面
 
@@ -60,6 +60,17 @@ npm run serve
 1. 公网业务端口（默认 `8000`）：仅用于 `webHook` 与健康检查
 2. 本地控制端口（默认 `18000`）：用于前端控制 API（配置读写、日志、手动触发等）
 
+配置与日志存储采用按平台自动检测路径，不再写入安装目录：
+
+1. Linux：
+1. 配置目录：`/etc/webhookserver`（配置文件：`/etc/webhookserver/config.json`）
+2. 日志目录：`/var/log/webhookserver`（日志文件：`/var/log/webhookserver/webhook.log`）
+2. Windows：
+1. 配置目录：`%USERPROFILE%/.webhookserver`（配置文件：`%USERPROFILE%/.webhookserver/config.json`）
+2. 日志目录：`%LOCALAPPDATA%/webhookserver`（日志文件：`%LOCALAPPDATA%/webhookserver/webhook.log`）
+
+首次启动时会自动创建目录，并将安装目录中的 `config.json` 作为初始模板迁移到系统目录。
+
 可通过环境变量修改控制端口：
 
 ```bash
@@ -91,9 +102,11 @@ CONTROL_API_PORT=19000 node index.mjs
 功能：
 
 1. 从后端读取当前 `config.json`
-2. 直接编辑 JSON 配置
-3. 一键格式化 JSON
-4. 保存后由后端校验并热更新（校验失败会返回错误）
+2. 表单配置保存时自动生成 JSON 并提交，不需要手动点击“生成 JSON”
+3. 直接编辑 JSON 配置
+4. 一键格式化 JSON
+5. 导出配置文件（JSON）和日志文件（.log）
+6. 保存后由后端校验并热更新（校验失败会返回错误）
 
 建议流程：
 
@@ -130,6 +143,8 @@ CONTROL_API_PORT=19000 node index.mjs
 4. `GET /api/config`：读取当前配置
 5. `PUT /api/config`：保存配置并热更新
 6. `GET /api/logs?limit=200`：读取日志（每条日志为一条 JSON）
+7. `GET /api/config/export`：导出配置 JSON 文件
+8. `GET /api/logs/export`：导出 `.log` 日志文件
 
 ## config.json 关键字段
 

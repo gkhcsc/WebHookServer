@@ -39,6 +39,26 @@ export async function saveConfig(config: Record<string, unknown>) {
   return data
 }
 
+export async function exportConfigFile() {
+  // Download as blob to keep original file bytes.
+  const response = await client.get('/config/export', { responseType: 'blob' })
+  const contentType = String(response.headers?.['content-type'] || '')
+  if (contentType.includes('text/html')) {
+    throw new Error('配置导出接口返回了HTML页面，请检查后端路由顺序')
+  }
+  return response.data
+}
+
+export async function exportLogFile() {
+  // Download as blob to keep original file bytes.
+  const response = await client.get('/logs/export', { responseType: 'blob' })
+  const contentType = String(response.headers?.['content-type'] || '')
+  if (contentType.includes('text/html')) {
+    throw new Error('日志导出接口返回了HTML页面，请检查后端路由顺序')
+  }
+  return response.data
+}
+
 export async function fetchLogs(limit = 200) {
   const { data } = await client.get<LogsResponse>('/logs', { params: { limit } })
   return data

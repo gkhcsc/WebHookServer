@@ -6,13 +6,62 @@ import { loadConfig } from './lib/config.mjs';
 import { createLogger } from './lib/logger.mjs';
 import { createRunner } from './lib/runner.mjs';
 import { createWebhookHandler } from './lib/handlers.mjs';
+import { detectStoragePaths, ensureStorageDirectories } from './lib/storage-paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const configFilePath = path.resolve(__dirname, 'config.json');
+const legacyConfigFilePath = path.resolve(__dirname, 'config.json');
 const frontendDistPath = path.resolve(__dirname, 'frontend', 'dist');
 const frontendIndexFilePath = path.resolve(frontendDistPath, 'index.html');
+// Detect platform-specific config/log storage locations.
+const storagePaths = detectStoragePaths();
 
-let config = loadConfig(configFilePath);
+function ensureConfigFileExists(configFilePath, fallbackConfigPath, defaultLogFilePath) {
+    if (fs.existsSync(configFilePath)) return;
+
+    let seed = {
+        server: {
+            port: 8000,
+            secret: '',
+            allowIps: [],
+        },
+        projects: [],
+        logging: {
+            level: 'info',
+            file: defaultLogFilePath,
+            maxSize: '10m',
+            maxFiles: 5,
+        },
+    };
+
+    if (fallbackConfigPath && fs.existsSync(fallbackConfigPath)) {
+        const raw = fs.readFileSync(fallbackConfigPath, 'utf8');
+        const parsed = JSON.parse(raw);
+        seed = {
+            ...seed,
+            ...parsed,
+            logging: {
+                ...seed.logging,
+                ...(parsed.logging || {}),
+                file: defaultLogFilePath,
+            },
+        };
+    }
+
+    fs.writeFileSync(configFilePath, JSON.stringify(seed, null, 2), 'utf8');
+}
+
+try {
+    // Ensure required storage directories exist before loading config.
+    ensureStorageDirectories(storagePaths);
+    // Seed config on first run (migrate from legacy config when available).
+    ensureConfigFileExists(storagePaths.configFilePath, legacyConfigFilePath, storagePaths.logFilePath);
+} catch (error) {
+    console.error('failed to prepare storage directories or config file', error.message);
+    process.exit(1);
+}
+
+const configFilePath = storagePaths.configFilePath;
+let config = loadConfig(configFilePath, { defaultLogFile: storagePaths.logFilePath });
 const logger = createLogger(config.logging);
 const runner = createRunner(logger, { timeoutMs: 5 * 60 * 1000 });
 const publicApp = express();
@@ -230,7 +279,7 @@ controlApp.put('/api/config', (req, res) => {
     try {
         validateIncomingConfigShape(nextConfig);
         fs.writeFileSync(tempPath, JSON.stringify(nextConfig, null, 2), 'utf8');
-        const validated = loadConfig(tempPath);
+        const validated = loadConfig(tempPath, { defaultLogFile: storagePaths.logFilePath });
         fs.renameSync(tempPath, configFilePath);
         reloadConfig(validated);
         logger.info('config updated from api');
@@ -246,13 +295,50 @@ controlApp.put('/api/config', (req, res) => {
 
 controlApp.get('/api/logs', (req, res) => {
     const limit = Number(req.query.limit || 200);
-    const logFilePath = path.resolve(__dirname, config.logging.file || './logs/webhook.log');
+    const logFilePath = config.logging.file || storagePaths.logFilePath;
     try {
         const logs = parseLogs(logFilePath, limit);
         return res.json({ logs, file: logFilePath });
     } catch (error) {
         logger.error('read logs failed', { message: error.message, file: logFilePath });
         return res.status(500).json({ message: 'failed to read logs' });
+    }
+});
+
+// Export config as downloadable JSON file.
+controlApp.get('/api/config/export', (req, res) => {
+    if (!fs.existsSync(configFilePath)) {
+        return res.status(404).json({ message: 'config file not found' });
+    }
+    try {
+        const stat = fs.statSync(configFilePath);
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="webhookserver-config.json"');
+        res.setHeader('Content-Length', String(stat.size));
+        fs.createReadStream(configFilePath).pipe(res);
+        return undefined;
+    } catch (error) {
+        logger.error('export config failed', { message: error.message, file: configFilePath });
+        return res.status(500).json({ message: 'failed to export config file' });
+    }
+});
+
+// Export raw .log file for troubleshooting/archiving.
+controlApp.get('/api/logs/export', (req, res) => {
+    const logFilePath = config.logging.file || storagePaths.logFilePath;
+    if (!fs.existsSync(logFilePath)) {
+        return res.status(404).json({ message: 'log file not found' });
+    }
+    try {
+        const stat = fs.statSync(logFilePath);
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="webhookserver.log"');
+        res.setHeader('Content-Length', String(stat.size));
+        fs.createReadStream(logFilePath).pipe(res);
+        return undefined;
+    } catch (error) {
+        logger.error('export logs failed', { message: error.message, file: logFilePath });
+        return res.status(500).json({ message: 'failed to export log file' });
     }
 });
 
