@@ -205,7 +205,13 @@ onMounted(loadData)
       </el-card>
     </section>
 
-    <el-drawer v-model="scriptDrawerVisible" size="50%" title="脚本映射(scripts)">
+    <el-drawer
+      v-model="scriptDrawerVisible"
+      size="50%"
+      title="脚本映射(scripts)"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+    >
       <template v-if="selectedProject">
         <h3>{{ selectedProject.name }}</h3>
         <el-table :data="selectedProject.scripts" stripe>

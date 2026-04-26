@@ -191,3 +191,12 @@ CONTROL_API_PORT=19000 node index.mjs
 2. 对公网部署时建议配置 `allowIps`
 3. 不要在配置中写入不必要的敏感命令
 
+
+
+
+
+## 目前支持事件
+
+- push
+- pull_request_merge
+

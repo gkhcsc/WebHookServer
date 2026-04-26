@@ -119,14 +119,14 @@ function validateIncomingConfigShape(value) {
             if (typeof script.event !== 'string' || !script.event.trim()) {
                 throw new Error('projects[].scripts[].event is required');
             }
+            if (typeof script.branch !== 'string' || !script.branch.trim()) {
+                throw new Error('projects[].scripts[].branch is required');
+            }
             if (typeof script.cmd !== 'string' || !script.cmd.trim()) {
                 throw new Error('projects[].scripts[].cmd is required');
             }
-            if (script.branch !== undefined && typeof script.branch !== 'string') {
-                throw new Error('projects[].scripts[].branch must be a string');
-            }
-            if (script.cwd !== undefined && typeof script.cwd !== 'string') {
-                throw new Error('projects[].scripts[].cwd must be a string');
+            if (typeof script.cwd !== 'string' || !script.cwd.trim()) {
+                throw new Error('projects[].scripts[].cwd is required');
             }
         }
     }
@@ -178,7 +178,7 @@ function sanitizeConfig(value) {
 
 function findScript(project, eventType, branch) {
     if (!project?.scripts) return null;
-    return project.scripts.find((item) => item.event === eventType && (!item.branch || item.branch === branch)) || null;
+    return project.scripts.find((item) => item.event === eventType && item.branch === branch) || null;
 }
 
 function queueProjectJob(projectName, eventType, branch) {

@@ -49,7 +49,6 @@ const eventOptions = [
   { label: 'issue_hooks', value: 'issue_hooks' },
   { label: 'push_hooks', value: 'push_hooks' },
   { label: 'tag_push_hooks', value: 'tag_push_hooks' },
-  { label: 'merge_request_hooks', value: 'merge_request_hooks' },
   { label: 'note_hooks', value: 'note_hooks' },
 ]
 
@@ -89,6 +88,108 @@ function createEmptyScript(): EditableScript {
   }
 }
 
+function normalizeEventValue(value: unknown) {
+  const event = String(value ?? '').trim()
+  if (event === 'merge_request_hooks') {
+    return 'pull_request_merged'
+  }
+  return event
+}
+
+function normalizeStringList(values: unknown[] = []) {
+  return Array.from(new Set(values.map((item) => String(item).trim()).filter(Boolean)))
+}
+
+function formatTimestamp(date = new Date()) {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    '-',
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join('')
+}
+
+function buildExportFilename(name: string, extension: string) {
+  return `${name}-${formatTimestamp()}.${extension}`
+}
+
+function getProjectEventValues(project: EditableProject) {
+  return normalizeStringList(project.events)
+}
+
+function getProjectBranchValues(project: EditableProject) {
+  return normalizeStringList(project.branches)
+}
+
+function validateFormConfig() {
+  const activeProjects = configForm.value.projects.filter((project) => !project.isDeleted)
+
+  for (const project of activeProjects) {
+    const projectName = project.name.trim() || '未命名项目'
+    const projectEvents = getProjectEventValues(project)
+    const projectBranches = getProjectBranchValues(project)
+
+    if (!project.name.trim()) {
+      ElMessage.warning('项目名称不能为空')
+      return false
+    }
+
+    if (projectBranches.length === 0) {
+      ElMessage.warning(`项目 ${projectName} 至少需要配置一个分支`)
+      return false
+    }
+
+    if (projectEvents.length === 0) {
+      ElMessage.warning(`项目 ${projectName} 至少需要配置一个事件`)
+      return false
+    }
+
+    for (const [index, script] of project.scripts.entries()) {
+      const event = normalizeEventValue(script.event)
+      const branch = script.branch.trim()
+      const cmd = script.cmd.trim()
+      const cwd = script.cwd.trim()
+      const scriptLabel = `项目 ${projectName} 的脚本 ${index + 1}`
+
+      if (!event) {
+        ElMessage.warning(`${scriptLabel} 必须选择事件`)
+        return false
+      }
+
+      if (!projectEvents.includes(event)) {
+        ElMessage.warning(`${scriptLabel} 的事件必须来自当前项目 events`)
+        return false
+      }
+
+      if (!branch) {
+        ElMessage.warning(`${scriptLabel} 必须选择分支`)
+        return false
+      }
+
+      if (!projectBranches.includes(branch)) {
+        ElMessage.warning(`${scriptLabel} 的分支必须来自当前项目 branches`)
+        return false
+      }
+
+      if (!cmd) {
+        ElMessage.warning(`${scriptLabel} 的执行命令不能为空`)
+        return false
+      }
+
+      if (!cwd) {
+        ElMessage.warning(`${scriptLabel} 的工作目录不能为空`)
+        return false
+      }
+    }
+  }
+
+  return true
+}
+
 function createEmptyProject(): EditableProject {
   return {
     uid: `project-${Date.now()}-${projectUidSeed++}`,
@@ -122,15 +223,15 @@ function normalizeConfig(raw: Record<string, unknown>): EditableConfig {
         isDeleted: false,
         name: String(project.name ?? ''),
         branches: Array.isArray(project.branches)
-          ? project.branches.map((branch) => String(branch)).filter(Boolean)
+          ? normalizeStringList(project.branches)
           : [],
         events: Array.isArray(project.events)
-          ? project.events.map((event) => String(event)).filter(Boolean)
+          ? normalizeStringList(project.events.map((event) => normalizeEventValue(event)))
           : [],
         scripts: scripts.map((scriptItem) => {
           const script = scriptItem as Partial<EditableScript>
           return {
-            event: String(script.event ?? ''),
+            event: normalizeEventValue(script.event),
             branch: String(script.branch ?? ''),
             cmd: String(script.cmd ?? ''),
             cwd: String(script.cwd ?? ''),
@@ -158,22 +259,14 @@ function buildConfigPayload(): Record<string, unknown> {
       .filter((project) => !project.isDeleted)
       .map((project) => ({
         name: project.name.trim(),
-        branches: project.branches.map((item) => item.trim()).filter(Boolean),
-        events: project.events.map((item) => item.trim()).filter(Boolean),
-        scripts: project.scripts
-          .map((script) => ({
-            event: script.event.trim(),
-            branch: script.branch.trim(),
-            cmd: script.cmd.trim(),
-            cwd: script.cwd.trim(),
-          }))
-          .filter((script) => script.event && script.cmd)
-          .map((script) => ({
-            event: script.event,
-            ...(script.branch ? { branch: script.branch } : {}),
-            cmd: script.cmd,
-            ...(script.cwd ? { cwd: script.cwd } : {}),
-          })),
+        branches: normalizeStringList(project.branches),
+        events: normalizeStringList(project.events.map((item) => normalizeEventValue(item))),
+        scripts: project.scripts.map((script) => ({
+          event: normalizeEventValue(script.event),
+          branch: script.branch.trim(),
+          cmd: script.cmd.trim(),
+          cwd: script.cwd.trim(),
+        })),
       }))
       .filter((project) => project.name),
     logging: {
@@ -186,8 +279,12 @@ function buildConfigPayload(): Record<string, unknown> {
 }
 
 function syncEditorFromForm() {
+  if (!validateFormConfig()) {
+    return false
+  }
   const payload = buildConfigPayload()
   editorText.value = JSON.stringify(payload, null, 2)
+  return true
 }
 
 function triggerBlobDownload(blob: Blob, filename: string) {
@@ -222,8 +319,8 @@ function openAddProjectDialog() {
 
 function confirmAddProject() {
   const name = newProjectDraft.value.name.trim()
-  const branches = newProjectDraft.value.branches.map((item) => item.trim()).filter(Boolean)
-  const events = newProjectDraft.value.events.map((item) => item.trim()).filter(Boolean)
+  const branches = normalizeStringList(newProjectDraft.value.branches)
+  const events = normalizeStringList(newProjectDraft.value.events.map((item) => normalizeEventValue(item)))
 
   if (!name || branches.length === 0 || events.length === 0) {
     ElMessage.warning('新增项目时，name、branches、events 都是必填')
@@ -326,6 +423,8 @@ async function submitConfig() {
       type: 'warning',
       confirmButtonText: '保存',
       cancelButtonText: '取消',
+      closeOnClickModal: false,
+      closeOnPressEscape: false,
     })
   } catch {
     return
@@ -347,7 +446,7 @@ async function submitConfig() {
 async function downloadConfigExport() {
   try {
     const blob = await exportConfigFile()
-    triggerBlobDownload(blob, 'webhookserver-config.json')
+    triggerBlobDownload(blob, buildExportFilename('webhookserver-config', 'json'))
     ElMessage.success('配置文件导出成功')
   } catch (error: any) {
     const message = error?.response?.data?.message || error?.message || '导出配置文件失败'
@@ -358,7 +457,7 @@ async function downloadConfigExport() {
 async function downloadLogExport() {
   try {
     const blob = await exportLogFile()
-    triggerBlobDownload(blob, 'webhookserver.log')
+    triggerBlobDownload(blob, buildExportFilename('webhookserver', 'log'))
     ElMessage.success('日志文件导出成功')
   } catch (error: any) {
     const message = error?.response?.data?.message || error?.message || '导出日志文件失败'
@@ -367,7 +466,9 @@ async function downloadLogExport() {
 }
 
 async function submitFormConfig() {
-  syncEditorFromForm()
+  if (!syncEditorFromForm()) {
+    return
+  }
   await submitConfig()
 }
 
@@ -487,9 +588,9 @@ loadConfigData()
                           v-model="project.events"
                           multiple
                           filterable
-                          allow-create
-                          default-first-option
-                          placeholder="输入事件后回车新增"
+                          collapse-tags
+                          collapse-tags-tooltip
+                          placeholder="请选择项目支持的事件"
                         >
                           <el-option v-for="item in eventOptions" :key="item.value" :label="item.label" :value="item.value" />
                         </el-select>
@@ -517,16 +618,38 @@ loadConfigData()
                           </div>
                         </template>
                         <el-form label-position="top" class="fixed-form-grid">
-                          <el-form-item label="事件 event">
-                            <el-input v-model="script.event" placeholder="如 push" />
+                          <el-form-item label="事件 event" required>
+                            <el-select
+                              v-model="script.event"
+                              placeholder="请选择当前项目事件"
+                              :disabled="getProjectEventValues(project).length === 0"
+                            >
+                              <el-option
+                                v-for="event in getProjectEventValues(project)"
+                                :key="event"
+                                :label="event"
+                                :value="event"
+                              />
+                            </el-select>
                           </el-form-item>
-                          <el-form-item label="分支 branch（可选）">
-                            <el-input v-model="script.branch" placeholder="如 master" />
+                          <el-form-item label="分支 branch" required>
+                            <el-select
+                              v-model="script.branch"
+                              placeholder="请选择当前项目分支"
+                              :disabled="getProjectBranchValues(project).length === 0"
+                            >
+                              <el-option
+                                v-for="branch in getProjectBranchValues(project)"
+                                :key="branch"
+                                :label="branch"
+                                :value="branch"
+                              />
+                            </el-select>
                           </el-form-item>
                           <el-form-item label="执行命令 cmd">
                             <el-input v-model="script.cmd" placeholder="请输入脚本命令" />
                           </el-form-item>
-                          <el-form-item label="工作目录 cwd（可选）">
+                          <el-form-item label="工作目录 cwd" required>
                             <el-input v-model="script.cwd" placeholder="如 /root/WebHook" />
                           </el-form-item>
                         </el-form>
@@ -595,7 +718,13 @@ loadConfigData()
         </el-tab-pane>
       </el-tabs>
 
-      <el-dialog v-model="addProjectDialogVisible" title="新增项目" width="620px">
+      <el-dialog
+        v-model="addProjectDialogVisible"
+        title="新增项目"
+        width="620px"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+      >
         <el-alert
           title="新增项目时，name、branches、events 为必填"
           type="warning"
@@ -627,9 +756,9 @@ loadConfigData()
               v-model="newProjectDraft.events"
               multiple
               filterable
-              allow-create
-              default-first-option
-              placeholder="输入事件后回车新增"
+              collapse-tags
+              collapse-tags-tooltip
+              placeholder="请选择项目支持的事件"
             >
               <el-option v-for="item in eventOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
