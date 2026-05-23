@@ -1,0 +1,20 @@
+{
+  "name": "@webhook/server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start:backend": "node index.mjs",
+    "start:frontend": "npm run dev --prefix=frontend",
+    "build:frontend": "npm run build --prefix=frontend",
+    "init:frontend":"npm install --prefix=frontend",
+    "start": "npm run start:backend",
+    "serve": "run-s init:frontend build:frontend start:backend"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "winston": "^3.19.0"
+  },
+  "devDependencies": {
+    "npm-run-all": "^4.1.5"
+  }
+}
