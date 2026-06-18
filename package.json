@@ -2,10 +2,12 @@
   "name": "webhook-server-root",
   "private": true,
   "scripts": {
+    "setup": "node setup.mjs",
+    "dev": "pnpm --parallel run dev",
     "dev:server": "pnpm --filter @webhook/server run dev",
     "dev:frontend": "pnpm --filter @webhook/frontend run dev",
-    "dev": "pnpm --parallel run dev",
-    "build": "pnpm -r run build",
-    "start":"pnpm --filter @webhook/server run start"
+    "build": "pnpm --filter @webhook/frontend run build",
+    "start": "node start.mjs",
+    "start:server": "pnpm --filter @webhook/server run start"
   }
 }

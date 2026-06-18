@@ -13,7 +13,7 @@ import { createPublicRouter } from './router/public.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const legacyConfigFilePath = path.resolve(__dirname, 'config.json');
-const frontendDistPath = path.resolve(__dirname, 'frontend', 'dist');
+const frontendDistPath = path.resolve(__dirname, '..', '..', 'dist');
 const frontendIndexFilePath = path.resolve(frontendDistPath, 'index.html');
 // Detect platform-specific config/log storage locations.
 const storagePaths = detectStoragePaths();
