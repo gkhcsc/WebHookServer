@@ -9,17 +9,30 @@ const logs = ref<LogEntry[]>([])
 const filePath = ref('')
 const limit = ref(200)
 const levelFilter = ref('all')
+const searchText = ref('')
 
 const levelOptions = ['all', 'error', 'warn', 'info', 'debug']
 
 const filteredLogs = computed(() => {
-  if (levelFilter.value === 'all') {
-    return logs.value
+  let result = logs.value
+  if (levelFilter.value !== 'all') {
+    result = result.filter((item) => {
+      const parsedLevel = item.parsed && typeof item.parsed.level === 'string' ? item.parsed.level : ''
+      return parsedLevel.toLowerCase() === levelFilter.value
+    })
   }
-  return logs.value.filter((item) => {
-    const parsedLevel = item.parsed && typeof item.parsed.level === 'string' ? item.parsed.level : ''
-    return parsedLevel.toLowerCase() === levelFilter.value
-  })
+  if (searchText.value.trim()) {
+    const keyword = searchText.value.trim().toLowerCase()
+    result = result.filter((item) => {
+      const raw = item.raw || ''
+      const timestamp = item.parsed?.timestamp ? String(item.parsed.timestamp) : ''
+      const message = item.parsed?.message ? String(item.parsed.message) : ''
+      return raw.toLowerCase().includes(keyword)
+        || timestamp.toLowerCase().includes(keyword)
+        || message.toLowerCase().includes(keyword)
+    })
+  }
+  return result
 })
 
 async function loadLogs() {
@@ -41,8 +54,26 @@ function levelType(level: unknown) {
   const text = level.toLowerCase()
   if (text.includes('error')) return 'danger'
   if (text.includes('warn')) return 'warning'
-  if (text.includes('debug')) return 'info'
+  if (text.includes('debug')) return ''
   return 'success'
+}
+
+function levelColor(level: unknown) {
+  if (typeof level !== 'string') return undefined
+  const text = level.toLowerCase()
+  if (text.includes('error')) return '#dc2626'
+  if (text.includes('warn')) return '#d97706'
+  if (text.includes('debug')) return '#6366f1'
+  return '#0d9488'
+}
+
+function copyLog(log: LogEntry) {
+  const text = formatLogJson(log)
+  navigator.clipboard.writeText(text).then(() => {
+    ElMessage.success('已复制到剪贴板')
+  }).catch(() => {
+    ElMessage.error('复制失败')
+  })
 }
 
 loadLogs()
@@ -52,37 +83,64 @@ loadLogs()
   <div class="page">
     <el-card class="panel" shadow="never" v-loading="loading">
       <template #header>
-        <div class="panel-title">日志查看</div>
+        <div class="panel-header-row">
+          <div class="panel-title">日志查看</div>
+          <el-button type="primary" plain size="small" @click="loadLogs" :loading="loading">
+            刷新
+          </el-button>
+        </div>
       </template>
 
-      <el-form inline>
-        <el-form-item label="条数">
-          <el-input-number v-model="limit" :min="1" :max="1000" :step="50" />
-        </el-form-item>
-        <el-form-item label="级别过滤">
-          <el-select v-model="levelFilter" style="width: 140px">
-            <el-option v-for="item in levelOptions" :key="item" :label="item" :value="item" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="loadLogs" :loading="loading">刷新日志</el-button>
-        </el-form-item>
-      </el-form>
+      <div class="log-toolbar">
+        <el-form inline class="log-form">
+          <el-form-item label="条数">
+            <el-input-number v-model="limit" :min="1" :max="1000" :step="50" size="small" />
+          </el-form-item>
+          <el-form-item label="级别">
+            <el-select v-model="levelFilter" size="small" style="width: 110px">
+              <el-option v-for="item in levelOptions" :key="item" :label="item" :value="item" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="搜索">
+            <el-input
+              v-model="searchText"
+              placeholder="输入关键词过滤…"
+              clearable
+              size="small"
+              style="width: 200px"
+            />
+          </el-form-item>
+        </el-form>
+      </div>
 
-      <el-alert :closable="false" type="info" show-icon style="margin-bottom: 12px">
+      <el-alert :closable="false" type="info" show-icon style="margin-bottom: 14px">
         <template #title>日志文件：{{ filePath || '未知' }}</template>
       </el-alert>
 
-      <el-empty v-if="!filteredLogs.length" description="暂无日志数据" />
+      <el-empty v-if="!filteredLogs.length" description="暂无日志数据" :image-size="80" />
 
       <div v-else class="json-log-list">
-        <el-card v-for="item in filteredLogs" :key="item.id" class="json-log-card" shadow="hover">
+        <el-card
+          v-for="item in filteredLogs"
+          :key="item.id"
+          class="json-log-card"
+          shadow="hover"
+        >
           <template #header>
             <div class="json-log-header">
-              <span>{{ (item.parsed && item.parsed.timestamp) || '无时间戳' }}</span>
-              <el-tag size="small" :type="levelType(item.parsed && item.parsed.level)">
-                {{ (item.parsed && item.parsed.level) || 'unknown' }}
-              </el-tag>
+              <div class="json-log-meta">
+                <span class="log-timestamp">{{ (item.parsed && item.parsed.timestamp) || '—' }}</span>
+                <el-tag
+                  size="small"
+                  :type="levelType(item.parsed && item.parsed.level)"
+                  :color="levelColor(item.parsed && item.parsed.level)"
+                  effect="dark"
+                  round
+                >
+                  {{ (item.parsed && item.parsed.level) || 'unknown' }}
+                </el-tag>
+              </div>
+              <el-button link size="small" @click="copyLog(item)">复制</el-button>
             </div>
           </template>
           <pre class="json-log-content">{{ formatLogJson(item) }}</pre>
@@ -93,13 +151,26 @@ loadLogs()
 </template>
 
 <style scoped>
-.json-log-list {
-  display: grid;
-  gap: 12px;
+.log-toolbar {
+  margin-bottom: 8px;
+}
+.log-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
+.json-log-list {
+  display: grid;
+  gap: 10px;
+}
 .json-log-card {
-  border-radius: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  transition: border-color var(--transition-fast);
+}
+.json-log-card:hover {
+  border-color: var(--color-primary);
 }
 
 .json-log-header {
@@ -107,17 +178,30 @@ loadLogs()
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+.json-log-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.log-timestamp {
   font-size: 13px;
-  color: #59637a;
+  color: var(--text-secondary);
+  font-family: 'SF Mono', 'Consolas', 'Courier New', monospace;
 }
 
 .json-log-content {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
-  font-family: 'Consolas', 'Courier New', monospace;
+  font-family: 'SF Mono', 'Consolas', 'Courier New', monospace;
   font-size: 13px;
-  line-height: 1.5;
-  color: #1f2a44;
+  line-height: 1.6;
+  color: var(--text-main);
+  max-height: 300px;
+  overflow-y: auto;
+  background: var(--surface-hover);
+  padding: 10px;
+  border-radius: var(--radius-sm);
 }
 </style>
