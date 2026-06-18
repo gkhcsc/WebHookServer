@@ -3,12 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start:backend": "node index.mjs",
-    "start:frontend": "npm run dev --prefix=frontend",
-    "build:frontend": "npm run build --prefix=frontend",
-    "init:frontend":"npm install --prefix=frontend",
-    "start": "npm run start:backend",
-    "serve": "run-s init:frontend build:frontend start:backend"
+    "dev": "node index.mjs"
   },
   "dependencies": {
     "express": "^5.2.1",
