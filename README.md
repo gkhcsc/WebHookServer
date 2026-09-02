@@ -1,5 +1,7 @@
 # WebHook Server
 
+基于配置驱动的自动化任务执行系统
+
 基于 Node.js + Express 的 WebHook 服务，支持接收 Gitee WebHook 请求并按配置触发脚本。附带 Vue 3 前端管理控制台。
 
 ## 技术栈

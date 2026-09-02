@@ -4,6 +4,11 @@ export function isStringArray(value) {
     return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
+
+/**
+ * Validates the shape of the incoming config object.
+ * @param {*} value - The config object to validate.
+ */
 export function validateIncomingConfigShape(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         throw new Error('config must be an object');
@@ -85,6 +90,11 @@ export function isLoopbackAddress(value) {
         || value === '::ffff:127.0.0.1';
 }
 
+/**
+ * Sanitizes the config object by removing any sensitive information.
+ * @param {*} value - The config object to sanitize.
+ * @returns {Object} - The sanitized config object.
+ */
 export function sanitizeConfig(value) {
     return {
         server: {
