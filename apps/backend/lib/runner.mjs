@@ -76,12 +76,17 @@ export function createRunner(logger, options = {}) {
 
         child.on('close', (code) => {
             clearTimeout(timer);
-            logger.info('command finished', {
+            const logDetails = {
                 jobId: job.id,
                 code,
                 stdout: summarize(stdout),
                 stderr: summarize(stderr),
-            });
+            };
+            if (stderr) {
+                logger.error('command finished with stderr', logDetails);
+            } else {
+                logger.info('command finished', logDetails);
+            }
             running = false;
             processNext();
         });
