@@ -72,19 +72,19 @@ export function createWebhookHandler({ config, logger, runner }) {
         const event = resolveEvent(eventBody, body);
 
         if (!event || !repo) {
-            logger.info('ignored event', { reason: 'unsupported', event: eventBody, repo });
+            logger.error('ignored event', { reason: 'unsupported', event: eventBody, repo });
             return res.status(200).send('ignored');
         }
 
         const project = config.projects.find((p) => p.name === repo);
         if (!project) {
-            logger.info('ignored event', { reason: 'unknown project', repo });
+            logger.error('ignored event', { reason: 'unknown project', repo });
             return res.status(200).send('ignored');
         }
 
         const script = findScript(project, event.type, event.branch);
         if (!script) {
-            logger.info('ignored event', { reason: 'no script mapped', repo, branch: event.branch, event: event.type });
+            logger.error('ignored event', { reason: 'no script mapped', repo, branch: event.branch, event: event.type });
             return res.status(200).send('ignored');
         }
 
