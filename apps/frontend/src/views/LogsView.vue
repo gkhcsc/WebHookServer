@@ -18,10 +18,31 @@ const timeSortOptions = [
   { label: '时间顺序（最早）', value: 'asc' },
 ]
 
-function timestampValue(item: LogEntry) {
+function timestampDate(item: LogEntry) {
   const timestamp = item.parsed?.timestamp
-  if (typeof timestamp !== 'string' && typeof timestamp !== 'number') return NaN
-  return Date.parse(String(timestamp))
+  if (typeof timestamp !== 'string' && typeof timestamp !== 'number') return null
+  const date = typeof timestamp === 'number' ? new Date(timestamp) : new Date(timestamp)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function formatTimestamp(item: LogEntry) {
+  const date = timestampDate(item)
+  if (!date) return '—'
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).format(date).replace(/\//g, '-')
+}
+
+function formatDisplayedLogJson(log: LogEntry) {
+  if (!log.parsed) return log.raw
+  return JSON.stringify({ ...log.parsed, timestamp: formatTimestamp(log) }, null, 2)
 }
 
 const filteredLogs = computed(() => {
@@ -44,9 +65,9 @@ const filteredLogs = computed(() => {
     })
   }
   return [...result].sort((left, right) => {
-    const leftTime = timestampValue(left)
-    const rightTime = timestampValue(right)
-    if (Number.isNaN(leftTime) || Number.isNaN(rightTime)) return 0
+    const leftTime = timestampDate(left)?.getTime()
+    const rightTime = timestampDate(right)?.getTime()
+    if (leftTime === undefined || rightTime === undefined) return 0
     return timeSort.value === 'desc' ? rightTime - leftTime : leftTime - rightTime
   })
 })
@@ -155,7 +176,7 @@ loadLogs()
           <template #header>
             <div class="json-log-header">
               <div class="json-log-meta">
-                <span class="log-timestamp">{{ (item.parsed && item.parsed.timestamp) || '—' }}</span>
+                <span class="log-timestamp">{{ formatTimestamp(item) }}</span>
                 <el-tag
                   size="small"
                   :type="levelType(item.parsed && item.parsed.level)"
@@ -169,7 +190,7 @@ loadLogs()
               <el-button link size="small" @click="copyLog(item)">复制</el-button>
             </div>
           </template>
-          <pre class="json-log-content">{{ formatLogJson(item) }}</pre>
+          <pre class="json-log-content">{{ formatDisplayedLogJson(item) }}</pre>
         </el-card>
       </div>
     </el-card>
