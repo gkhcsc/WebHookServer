@@ -2,6 +2,12 @@
 import { computed, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { exportConfigFile, exportLogFile, fetchConfig, saveConfig } from '@/api/webhook'
+document.addEventListener('keydown', function(event) {
+    if ((event.ctrlKey || event.metaKey) && (event.key === 's' || event.key === 'S')) {
+        event.preventDefault();
+        submitFormConfig();
+    }
+});
 
 interface EditableScript {
   event: string
