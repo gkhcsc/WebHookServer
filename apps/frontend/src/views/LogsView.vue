@@ -10,8 +10,19 @@ const filePath = ref('')
 const limit = ref(200)
 const levelFilter = ref('all')
 const searchText = ref('')
+const timeSort = ref<'desc' | 'asc'>('desc')
 
 const levelOptions = ['all', 'error', 'warn', 'info', 'debug']
+const timeSortOptions = [
+  { label: '时间倒序（最新）', value: 'desc' },
+  { label: '时间顺序（最早）', value: 'asc' },
+]
+
+function timestampValue(item: LogEntry) {
+  const timestamp = item.parsed?.timestamp
+  if (typeof timestamp !== 'string' && typeof timestamp !== 'number') return NaN
+  return Date.parse(String(timestamp))
+}
 
 const filteredLogs = computed(() => {
   let result = logs.value
@@ -32,7 +43,12 @@ const filteredLogs = computed(() => {
         || message.toLowerCase().includes(keyword)
     })
   }
-  return result
+  return [...result].sort((left, right) => {
+    const leftTime = timestampValue(left)
+    const rightTime = timestampValue(right)
+    if (Number.isNaN(leftTime) || Number.isNaN(rightTime)) return 0
+    return timeSort.value === 'desc' ? rightTime - leftTime : leftTime - rightTime
+  })
 })
 
 async function loadLogs() {
@@ -99,6 +115,16 @@ loadLogs()
           <el-form-item label="级别">
             <el-select v-model="levelFilter" size="small" style="width: 110px">
               <el-option v-for="item in levelOptions" :key="item" :label="item" :value="item" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="时间">
+            <el-select v-model="timeSort" size="small" style="width: 150px">
+              <el-option
+                v-for="item in timeSortOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
             </el-select>
           </el-form-item>
           <el-form-item label="搜索">
