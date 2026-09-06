@@ -39,6 +39,16 @@ export async function saveConfig(config: Record<string, unknown>) {
   return data
 }
 
+export async function readScript(command: string, cwd: string) {
+  const { data } = await client.post<{ path: string; content: string }>('/scripts/read', { command, cwd })
+  return data
+}
+
+export async function saveScript(command: string, cwd: string, content: string) {
+  const { data } = await client.put<{ status: string; path: string }>('/scripts', { command, cwd, content })
+  return data
+}
+
 export async function exportConfigFile() {
   // Download as blob to keep original file bytes.
   const response = await client.get('/config/export', { responseType: 'blob' })

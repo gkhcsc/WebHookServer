@@ -1,5 +1,6 @@
 import express from 'express';
 import fs from 'fs';
+import path from 'path';
 import { 
     sanitizeConfig, 
     queueProjectJob, 
@@ -7,6 +8,22 @@ import {
     parseLogs,
     isLoopbackAddress
 } from '../lib/api-utils.mjs';
+
+const scriptExtensions = new Set(['.js', '.mjs', '.cjs', '.ts', '.py', '.sh', '.bash', '.bat', '.cmd', '.ps1']);
+
+function tokenizeCommand(command) {
+    return command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g)
+        ?.map((token) => token.replace(/^['"]|['"]$/g, '')) || [];
+}
+
+function resolveScriptPath(command, cwd) {
+    const tokens = tokenizeCommand(command);
+    const candidate = tokens.find((token) => scriptExtensions.has(path.extname(token).toLowerCase()));
+    if (!candidate) {
+        throw new Error('无法从执行命令中识别脚本路径，请使用 .js/.py/.sh 等脚本文件路径');
+    }
+    return path.resolve(cwd || process.cwd(), candidate);
+}
 
 export function createControlRouter({ configContext, logger, runner, storagePaths, loadConfig, reloadConfig, frontendDistPath, frontendIndexFilePath }) {
     const router = express.Router();
@@ -59,6 +76,44 @@ export function createControlRouter({ configContext, logger, runner, storagePath
             return res.status(result.code).json({ message: result.message });
         }
         return res.status(result.code).json(result.data);
+    });
+
+    router.post('/api/scripts/read', (req, res) => {
+        const { command, cwd } = req.body || {};
+        if (typeof command !== 'string' || !command.trim()) {
+            return res.status(400).json({ message: 'command is required' });
+        }
+        try {
+            const filePath = resolveScriptPath(command, typeof cwd === 'string' ? cwd.trim() : '');
+            if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+                return res.status(404).json({ message: `脚本文件不存在: ${filePath}` });
+            }
+            return res.json({ path: filePath, content: fs.readFileSync(filePath, 'utf8') });
+        } catch (error) {
+            return res.status(400).json({ message: error.message || '无法读取脚本文件' });
+        }
+    });
+
+    router.put('/api/scripts', (req, res) => {
+        const { command, cwd, content } = req.body || {};
+        if (typeof command !== 'string' || !command.trim()) {
+            return res.status(400).json({ message: 'command is required' });
+        }
+        if (typeof content !== 'string') {
+            return res.status(400).json({ message: 'content is required' });
+        }
+        try {
+            const filePath = resolveScriptPath(command, typeof cwd === 'string' ? cwd.trim() : '');
+            if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+                return res.status(404).json({ message: `脚本文件不存在: ${filePath}` });
+            }
+            fs.writeFileSync(filePath, content, 'utf8');
+            logger.info('script updated from api', { file: filePath });
+            return res.json({ status: 'ok', path: filePath });
+        } catch (error) {
+            logger.error('update script failed', { message: error.message });
+            return res.status(400).json({ message: error.message || '无法保存脚本文件' });
+        }
     });
 
     router.get('/api/config', (req, res) => {

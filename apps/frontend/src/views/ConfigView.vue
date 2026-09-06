@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { exportConfigFile, exportLogFile, fetchConfig, saveConfig } from '@/api/webhook'
+import { exportConfigFile, exportLogFile, fetchConfig, readScript, saveConfig, saveScript } from '@/api/webhook'
 document.addEventListener('keydown', function(event) {
     if ((event.ctrlKey || event.metaKey) && (event.key === 's' || event.key === 'S')) {
         event.preventDefault();
@@ -48,6 +48,13 @@ const activeTab = ref('form')
 const activeFormSection = ref('server')
 const activeProjectPanels = ref<string[]>([])
 const addProjectDialogVisible = ref(false)
+const scriptDialogVisible = ref(false)
+const scriptDialogLoading = ref(false)
+const scriptDialogSaving = ref(false)
+const scriptFilePath = ref('')
+const scriptEditorText = ref('')
+const editingScriptCommand = ref('')
+const editingScriptCwd = ref('')
 let projectUidSeed = 0
 
 const hasUnsavedChanges = computed(() => {
@@ -320,6 +327,42 @@ function removeScript(projectIndex: number, scriptIndex: number) {
   configForm.value.projects[projectIndex]?.scripts.splice(scriptIndex, 1)
 }
 
+async function openScriptEditor(script: EditableScript) {
+  if (!script.cmd.trim()) {
+    ElMessage.warning('请先填写执行命令，再编辑脚本文件')
+    return
+  }
+  editingScriptCommand.value = script.cmd
+  editingScriptCwd.value = script.cwd
+  scriptDialogLoading.value = true
+  scriptDialogVisible.value = true
+  try {
+    const data = await readScript(script.cmd, script.cwd)
+    scriptFilePath.value = data.path
+    scriptEditorText.value = data.content
+  } catch (error: any) {
+    scriptDialogVisible.value = false
+    const message = error?.response?.data?.message || error?.message || '读取脚本文件失败'
+    ElMessage.error(message)
+  } finally {
+    scriptDialogLoading.value = false
+  }
+}
+
+async function confirmSaveScript() {
+  scriptDialogSaving.value = true
+  try {
+    await saveScript(editingScriptCommand.value, editingScriptCwd.value, scriptEditorText.value)
+    ElMessage.success('脚本保存成功')
+    scriptDialogVisible.value = false
+  } catch (error: any) {
+    const message = error?.response?.data?.message || error?.message || '保存脚本失败'
+    ElMessage.error(message)
+  } finally {
+    scriptDialogSaving.value = false
+  }
+}
+
 async function loadConfigData() {
   loading.value = true
   try {
@@ -558,7 +601,10 @@ loadConfigData()
                             </el-select>
                           </el-form-item>
                           <el-form-item label="执行命令" required>
-                            <el-input v-model="script.cmd" placeholder="请输入脚本命令" />
+                            <div class="command-editor-field">
+                              <el-input v-model="script.cmd" placeholder="如 node ./scripts/deploy.mjs" />
+                              <el-button type="primary" plain @click="openScriptEditor(script)">编辑脚本</el-button>
+                            </div>
                           </el-form-item>
                           <el-form-item label="工作目录" required>
                             <el-input v-model="script.cwd" placeholder="如 /root/WebHook" />
@@ -670,6 +716,40 @@ loadConfigData()
         <el-button type="primary" @click="confirmAddProject">确认新增</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="scriptDialogVisible"
+      title="编辑脚本文件"
+      width="820px"
+      top="6vh"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+    >
+      <div v-loading="scriptDialogLoading" class="script-editor-dialog">
+        <el-alert
+          title="保存后会直接覆盖服务器上的脚本文件，请确认内容无误。"
+          type="warning"
+          show-icon
+          :closable="false"
+          style="margin-bottom: 12px"
+        />
+        <div class="script-file-path" :title="scriptFilePath">{{ scriptFilePath || '正在读取脚本路径...' }}</div>
+        <el-input
+          v-model="scriptEditorText"
+          type="textarea"
+          :rows="24"
+          resize="vertical"
+          placeholder="脚本内容"
+          class="script-editor"
+        />
+      </div>
+      <template #footer>
+        <el-button @click="scriptDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="scriptDialogSaving" :disabled="scriptDialogLoading" @click="confirmSaveScript">
+          保存脚本
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -775,6 +855,31 @@ loadConfigData()
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
 }
+.command-editor-field {
+  display: flex;
+  gap: 8px;
+}
+.command-editor-field .el-input {
+  min-width: 0;
+  flex: 1;
+}
+.script-editor-dialog {
+  min-height: 280px;
+}
+.script-file-path {
+  overflow: hidden;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-family: 'SF Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.script-editor :deep(textarea) {
+  font-family: 'SF Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
 
 .config-editor :deep(textarea) {
   font-family: 'SF Mono', 'Consolas', 'Courier New', monospace;
@@ -792,6 +897,10 @@ loadConfigData()
 @media (max-width: 900px) {
   .fixed-form-grid {
     grid-template-columns: 1fr;
+  }
+  .command-editor-field {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 </style>
