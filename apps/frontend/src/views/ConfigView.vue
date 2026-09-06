@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { createScript, exportConfigFile, exportLogFile, fetchConfig, readScript, saveConfig, saveScript } from '@/api/webhook'
 document.addEventListener('keydown', function(event) {
@@ -65,6 +65,8 @@ const editingScriptCwd = ref('')
 const editingScript = ref<EditableScript | null>(null)
 const scriptDraftName = ref('')
 const scriptDraftRemark = ref('')
+const hasUserChanges = ref(false)
+const suppressAutoSaveChanges = ref(false)
 let projectUidSeed = 0
 
 const hasUnsavedChanges = computed(() => {
@@ -451,14 +453,19 @@ async function loadConfigData() {
   try {
     const data = await fetchConfig()
     const normalized = normalizeConfig(data.config)
+    suppressAutoSaveChanges.value = true
     configForm.value = normalized
     activeProjectPanels.value = []
     editorText.value = JSON.stringify(normalized, null, 2)
     lastSaved.value = editorText.value
+    hasUserChanges.value = false
+    await nextTick()
+    suppressAutoSaveChanges.value = false
   } catch (error) {
     ElMessage.error('读取配置失败')
     console.error(error)
   } finally {
+    suppressAutoSaveChanges.value = false
     loading.value = false
   }
 }
@@ -499,6 +506,7 @@ async function submitConfig() {
     ElMessage.success('配置保存成功')
     editorText.value = JSON.stringify(parsed, null, 2)
     lastSaved.value = editorText.value
+    hasUserChanges.value = false
   } catch (error: any) {
     const message = error?.response?.data?.message || error?.message || '保存配置失败'
     ElMessage.error(message)
@@ -508,7 +516,7 @@ async function submitConfig() {
 }
 
 async function autoSaveConfig() {
-  if (saving.value) return
+  if (saving.value || !hasUserChanges.value || !hasUnsavedChanges.value) return
   let payload: Record<string, unknown>
   if (activeTab.value === 'raw') {
     try {
@@ -533,6 +541,7 @@ async function autoSaveConfig() {
     await saveConfig(payload)
     editorText.value = JSON.stringify(payload, null, 2)
     lastSaved.value = editorText.value
+    hasUserChanges.value = false
     ElMessage.success('配置已自动保存')
   } catch (error: any) {
     const message = error?.response?.data?.message || error?.message || '自动保存配置失败'
@@ -557,11 +566,17 @@ function scheduleAutoSave() {
 }
 
 watch(configForm, () => {
-  if (!loading.value) scheduleAutoSave()
+  if (!loading.value && !suppressAutoSaveChanges.value) {
+    hasUserChanges.value = true
+    scheduleAutoSave()
+  }
 }, { deep: true })
 
 watch(editorText, () => {
-  if (!loading.value && activeTab.value === 'raw') scheduleAutoSave()
+  if (!loading.value && activeTab.value === 'raw' && !suppressAutoSaveChanges.value) {
+    hasUserChanges.value = true
+    scheduleAutoSave()
+  }
 })
 
 onBeforeUnmount(() => {
