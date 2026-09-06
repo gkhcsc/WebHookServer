@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { exportConfigFile, exportLogFile, fetchConfig, readScript, saveConfig, saveScript } from '@/api/webhook'
+import { createScript, exportConfigFile, exportLogFile, fetchConfig, readScript, saveConfig, saveScript } from '@/api/webhook'
 document.addEventListener('keydown', function(event) {
     if ((event.ctrlKey || event.metaKey) && (event.key === 's' || event.key === 'S')) {
         event.preventDefault();
@@ -14,6 +14,8 @@ interface EditableScript {
   branch: string
   cmd: string
   cwd: string
+  scriptName: string
+  scriptRemark: string
 }
 
 interface EditableProject {
@@ -26,6 +28,10 @@ interface EditableProject {
 }
 
 interface EditableConfig {
+  autoSave: {
+    enabled: boolean
+    delayMs: number
+  }
   server: {
     port: number
     secret: string
@@ -51,10 +57,14 @@ const addProjectDialogVisible = ref(false)
 const scriptDialogVisible = ref(false)
 const scriptDialogLoading = ref(false)
 const scriptDialogSaving = ref(false)
+const scriptDialogMode = ref<'create' | 'edit'>('edit')
 const scriptFilePath = ref('')
 const scriptEditorText = ref('')
 const editingScriptCommand = ref('')
 const editingScriptCwd = ref('')
+const editingScript = ref<EditableScript | null>(null)
+const scriptDraftName = ref('')
+const scriptDraftRemark = ref('')
 let projectUidSeed = 0
 
 const hasUnsavedChanges = computed(() => {
@@ -84,6 +94,10 @@ const newProjectDraft = ref({
 })
 
 const configForm = ref<EditableConfig>({
+  autoSave: {
+    enabled: true,
+    delayMs: 1000,
+  },
   server: {
     port: 8000,
     secret: '',
@@ -99,7 +113,7 @@ const configForm = ref<EditableConfig>({
 })
 
 function createEmptyScript(): EditableScript {
-  return { event: '', branch: '', cmd: '', cwd: '' }
+  return { event: '', branch: '', cmd: '', cwd: '', scriptName: '', scriptRemark: '' }
 }
 
 function normalizeEventValue(value: unknown) {
@@ -110,6 +124,12 @@ function normalizeEventValue(value: unknown) {
 
 function normalizeStringList(values: unknown[] = []) {
   return Array.from(new Set(values.map((item) => String(item).trim()).filter(Boolean)))
+}
+
+function inferScriptName(command: unknown) {
+  const value = String(command ?? '').trim()
+  const match = value.match(/(?:^|\s)(["']?[^\s"']+\.(?:js|mjs|cjs|ts|py|sh|bash|bat|cmd|ps1))["']?(?:\s|$)/i)
+  return match?.[1] || ''
 }
 
 function formatTimestamp(date = new Date()) {
@@ -171,11 +191,16 @@ function createEmptyProject(): EditableProject {
 
 function normalizeConfig(raw: Record<string, unknown>): EditableConfig {
   const value = raw as Partial<EditableConfig>
+  const autoSave = value.autoSave ?? ({} as EditableConfig['autoSave'])
   const server = value.server ?? ({} as EditableConfig['server'])
   const logging = value.logging ?? ({} as EditableConfig['logging'])
   const projects = Array.isArray(value.projects) ? value.projects : []
 
   return {
+    autoSave: {
+      enabled: autoSave.enabled !== false,
+      delayMs: Math.max(300, Math.min(Number(autoSave.delayMs ?? 1000), 60000)),
+    },
     server: {
       port: Number(server.port ?? 8000),
       secret: String(server.secret ?? ''),
@@ -197,6 +222,8 @@ function normalizeConfig(raw: Record<string, unknown>): EditableConfig {
             branch: String(script.branch ?? ''),
             cmd: String(script.cmd ?? ''),
             cwd: String(script.cwd ?? ''),
+            scriptName: String(script.scriptName ?? '') || inferScriptName(script.cmd),
+            scriptRemark: String(script.scriptRemark ?? ''),
           }
         }),
       }
@@ -212,6 +239,10 @@ function normalizeConfig(raw: Record<string, unknown>): EditableConfig {
 
 function buildConfigPayload(): Record<string, unknown> {
   return {
+    autoSave: {
+      enabled: configForm.value.autoSave.enabled,
+      delayMs: Number(configForm.value.autoSave.delayMs || 1000),
+    },
     server: {
       port: Number(configForm.value.server.port || 8000),
       secret: configForm.value.server.secret,
@@ -228,6 +259,8 @@ function buildConfigPayload(): Record<string, unknown> {
           branch: script.branch.trim(),
           cmd: script.cmd.trim(),
           cwd: script.cwd.trim(),
+          scriptName: script.scriptName.trim(),
+          scriptRemark: script.scriptRemark.trim(),
         })),
       }))
       .filter((project) => project.name),
@@ -320,18 +353,36 @@ function restoreProject(index: number) {
 }
 
 function addScript(projectIndex: number) {
-  configForm.value.projects[projectIndex]?.scripts.push(createEmptyScript())
+  const project = configForm.value.projects[projectIndex]
+  if (!project) return
+  project.scripts.push(createEmptyScript())
+  ElMessage.success('脚本映射已新增，请创建构建脚本')
 }
 
-function removeScript(projectIndex: number, scriptIndex: number) {
-  configForm.value.projects[projectIndex]?.scripts.splice(scriptIndex, 1)
+async function removeScript(projectIndex: number, scriptIndex: number) {
+  const script = configForm.value.projects[projectIndex]?.scripts[scriptIndex]
+  if (!script) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除构建脚本“${script.scriptName || `脚本 ${scriptIndex + 1}`}”吗？此操作只会删除脚本映射，不会删除工作目录中的脚本文件。`,
+      '确认删除',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+    configForm.value.projects[projectIndex]?.scripts.splice(scriptIndex, 1)
+  } catch {
+    return
+  }
 }
 
 async function openScriptEditor(script: EditableScript) {
-  if (!script.cmd.trim()) {
-    ElMessage.warning('请先填写执行命令，再编辑脚本文件')
+  if (!script.cmd.trim() || !script.cwd.trim()) {
+    ElMessage.warning('请先填写工作目录，再编辑构建脚本')
     return
   }
+  scriptDialogMode.value = 'edit'
+  editingScript.value = script
+  scriptDraftName.value = script.scriptName || '脚本文件'
+  scriptDraftRemark.value = script.scriptRemark
   editingScriptCommand.value = script.cmd
   editingScriptCwd.value = script.cwd
   scriptDialogLoading.value = true
@@ -349,11 +400,43 @@ async function openScriptEditor(script: EditableScript) {
   }
 }
 
+function openScriptCreator(script: EditableScript) {
+  if (!script.cwd.trim()) {
+    ElMessage.warning('请先填写工作目录，再创建构建脚本')
+    return
+  }
+  scriptDialogMode.value = 'create'
+  editingScript.value = script
+  editingScriptCommand.value = ''
+  editingScriptCwd.value = script.cwd
+  scriptFilePath.value = ''
+  scriptDraftName.value = ''
+  scriptDraftRemark.value = ''
+  scriptEditorText.value = ''
+  scriptDialogVisible.value = true
+}
+
 async function confirmSaveScript() {
   scriptDialogSaving.value = true
   try {
-    await saveScript(editingScriptCommand.value, editingScriptCwd.value, scriptEditorText.value)
-    ElMessage.success('脚本保存成功')
+    if (!editingScript.value) return
+    if (!scriptDraftName.value.trim()) {
+      ElMessage.warning('脚本名称不能为空')
+      return
+    }
+    if (scriptDialogMode.value === 'create') {
+      const data = await createScript(scriptDraftName.value, editingScriptCwd.value, scriptEditorText.value)
+      editingScript.value.scriptName = scriptDraftName.value.trim()
+      editingScript.value.scriptRemark = scriptDraftRemark.value.trim()
+      editingScript.value.cmd = data.command
+      scriptFilePath.value = data.path
+      ElMessage.success('构建脚本创建成功')
+    } else {
+      await saveScript(editingScriptCommand.value, editingScriptCwd.value, scriptEditorText.value)
+      editingScript.value.scriptName = scriptDraftName.value.trim()
+      editingScript.value.scriptRemark = scriptDraftRemark.value.trim()
+      ElMessage.success('构建脚本保存成功')
+    }
     scriptDialogVisible.value = false
   } catch (error: any) {
     const message = error?.response?.data?.message || error?.message || '保存脚本失败'
@@ -424,6 +507,67 @@ async function submitConfig() {
   }
 }
 
+async function autoSaveConfig() {
+  if (saving.value) return
+  let payload: Record<string, unknown>
+  if (activeTab.value === 'raw') {
+    try {
+      const parsed = JSON.parse(editorText.value) as Record<string, unknown>
+      payload = {
+        ...parsed,
+        autoSave: {
+          enabled: configForm.value.autoSave.enabled,
+          delayMs: Number(configForm.value.autoSave.delayMs || 1000),
+        },
+      }
+    } catch {
+      return
+    }
+  } else {
+    if (!validateFormConfig()) return
+    payload = buildConfigPayload()
+  }
+
+  saving.value = true
+  try {
+    await saveConfig(payload)
+    editorText.value = JSON.stringify(payload, null, 2)
+    lastSaved.value = editorText.value
+    ElMessage.success('配置已自动保存')
+  } catch (error: any) {
+    const message = error?.response?.data?.message || error?.message || '自动保存配置失败'
+    ElMessage.error(message)
+  } finally {
+    saving.value = false
+  }
+}
+
+async function persistAutoSaveSetting() {
+  await autoSaveConfig()
+}
+
+let autoSaveTimer: ReturnType<typeof setTimeout> | undefined
+function scheduleAutoSave() {
+  if (autoSaveTimer) clearTimeout(autoSaveTimer)
+  if (!configForm.value.autoSave.enabled) return
+  autoSaveTimer = setTimeout(() => {
+    autoSaveTimer = undefined
+    void autoSaveConfig()
+  }, configForm.value.autoSave.delayMs)
+}
+
+watch(configForm, () => {
+  if (!loading.value) scheduleAutoSave()
+}, { deep: true })
+
+watch(editorText, () => {
+  if (!loading.value && activeTab.value === 'raw') scheduleAutoSave()
+})
+
+onBeforeUnmount(() => {
+  if (autoSaveTimer) clearTimeout(autoSaveTimer)
+})
+
 async function downloadConfigExport() {
   try {
     const blob = await exportConfigFile()
@@ -491,6 +635,14 @@ loadConfigData()
           </el-radio-group>
 
           <section v-if="activeFormSection === 'server'" class="section-wrap">
+            <el-form label-position="top" class="autosave-settings">
+              <el-form-item label="自动保存">
+                <el-switch v-model="configForm.autoSave.enabled" active-text="开启" inactive-text="关闭" @change="persistAutoSaveSetting" />
+              </el-form-item>
+              <el-form-item label="停止操作后延迟（毫秒）">
+                <el-input-number v-model="configForm.autoSave.delayMs" :min="300" :max="60000" :step="100" style="width: 100%" />
+              </el-form-item>
+            </el-form>
             <el-form label-position="top" class="fixed-form-grid">
               <el-form-item label="服务端口">
                 <el-input-number v-model="configForm.server.port" :min="1" :max="65535" style="width: 100%" />
@@ -600,10 +752,15 @@ loadConfigData()
                               <el-option v-for="branch in getProjectBranchValues(project)" :key="branch" :label="branch" :value="branch" />
                             </el-select>
                           </el-form-item>
-                          <el-form-item label="执行命令" required>
-                            <div class="command-editor-field">
-                              <el-input v-model="script.cmd" placeholder="如 node ./scripts/deploy.mjs" />
-                              <el-button type="primary" plain @click="openScriptEditor(script)">编辑脚本</el-button>
+                          <el-form-item label="构建脚本" required>
+                            <div class="script-summary">
+                              <div v-if="script.scriptName" class="script-summary-info">
+                                <strong>{{ script.scriptName }}</strong>
+                                <span v-if="script.scriptRemark">{{ script.scriptRemark }}</span>
+                              </div>
+                              <span v-else class="script-summary-empty">尚未创建脚本</span>
+                              <el-button v-if="script.scriptName" type="primary" plain @click="openScriptEditor(script)">编辑脚本</el-button>
+                              <el-button v-else type="primary" plain @click="openScriptCreator(script)">创建脚本</el-button>
                             </div>
                           </el-form-item>
                           <el-form-item label="工作目录" required>
@@ -733,7 +890,15 @@ loadConfigData()
           :closable="false"
           style="margin-bottom: 12px"
         />
-        <div class="script-file-path" :title="scriptFilePath">{{ scriptFilePath || '正在读取脚本路径...' }}</div>
+        <el-form label-position="top" class="script-draft-form">
+          <el-form-item label="脚本名称" required>
+            <el-input v-model="scriptDraftName" placeholder="如 deploy.mjs（脚本位于工作目录下）" :disabled="scriptDialogMode === 'edit'" />
+          </el-form-item>
+          <el-form-item label="备注">
+            <el-input v-model="scriptDraftRemark" placeholder="填写脚本用途说明" />
+          </el-form-item>
+        </el-form>
+        <div v-if="scriptFilePath" class="script-file-path" :title="scriptFilePath">{{ scriptFilePath }}</div>
         <el-input
           v-model="scriptEditorText"
           type="textarea"
@@ -746,7 +911,7 @@ loadConfigData()
       <template #footer>
         <el-button @click="scriptDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="scriptDialogSaving" :disabled="scriptDialogLoading" @click="confirmSaveScript">
-          保存脚本
+          {{ scriptDialogMode === 'create' ? '创建脚本' : '保存脚本' }}
         </el-button>
       </template>
     </el-dialog>
@@ -836,6 +1001,17 @@ loadConfigData()
   border-radius: var(--radius-md);
   padding: 14px;
 }
+.autosave-settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-light);
+}
+.autosave-settings .el-form-item {
+  margin-bottom: 0;
+}
 
 .script-header {
   margin: 6px 0 8px;
@@ -855,13 +1031,48 @@ loadConfigData()
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
 }
-.command-editor-field {
+.script-summary {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 32px;
 }
-.command-editor-field .el-input {
+.script-summary-info {
+  display: grid;
   min-width: 0;
-  flex: 1;
+  gap: 2px;
+}
+.script-summary-info strong,
+.script-summary-info span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.script-summary-info strong {
+  color: var(--text-main);
+}
+.script-summary-info span,
+.script-summary-empty {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.script-summary .el-button {
+  flex-shrink: 0;
+}
+.script-draft-form {
+  grid-template-columns: 1fr 1fr;
+  display: grid;
+  gap: 10px;
+}
+.script-draft-form .el-form-item {
+  margin-bottom: 0;
+}
+.script-editor-dialog .script-editor {
+  min-width: 0;
+}
+.script-editor-dialog .script-editor :deep(textarea) {
+  min-width: 0;
 }
 .script-editor-dialog {
   min-height: 280px;
@@ -898,9 +1109,11 @@ loadConfigData()
   .fixed-form-grid {
     grid-template-columns: 1fr;
   }
-  .command-editor-field {
-    align-items: stretch;
-    flex-direction: column;
+  .autosave-settings {
+    grid-template-columns: 1fr;
+  }
+  .script-draft-form {
+    grid-template-columns: 1fr;
   }
 }
 </style>

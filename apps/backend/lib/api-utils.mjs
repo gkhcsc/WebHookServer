@@ -15,6 +15,17 @@ export function validateIncomingConfigShape(value) {
     }
 
     const next = value;
+    if (next.autoSave !== undefined) {
+        if (!next.autoSave || typeof next.autoSave !== 'object' || Array.isArray(next.autoSave)) {
+            throw new Error('autoSave must be an object');
+        }
+        if (typeof next.autoSave.enabled !== 'boolean') {
+            throw new Error('autoSave.enabled must be a boolean');
+        }
+        if (typeof next.autoSave.delayMs !== 'number' || !Number.isFinite(next.autoSave.delayMs)) {
+            throw new Error('autoSave.delayMs must be a number');
+        }
+    }
     if (!next.server || typeof next.server !== 'object' || Array.isArray(next.server)) {
         throw new Error('server is required');
     }
@@ -97,6 +108,7 @@ export function isLoopbackAddress(value) {
  */
 export function sanitizeConfig(value) {
     return {
+        autoSave: value.autoSave,
         server: {
             port: value.server.port,
             secretConfigured: Boolean(value.server.secret),
@@ -149,6 +161,10 @@ export function ensureConfigFileExists(configFilePath, fallbackConfigPath, defau
     if (fs.existsSync(configFilePath)) return;
 
     let seed = {
+        autoSave: {
+            enabled: true,
+            delayMs: 1000,
+        },
         server: {
             port: 8000,
             secret: '',

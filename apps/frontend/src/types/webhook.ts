@@ -12,9 +12,15 @@ export interface LoggingConfig {
 }
 
 export interface SummaryConfig {
+  autoSave: AutoSaveConfig
   server: ServerConfig
   logging: LoggingConfig
   projectCount: number
+}
+
+export interface AutoSaveConfig {
+  enabled: boolean
+  delayMs: number
 }
 
 export interface ProjectSummary {
@@ -29,6 +35,8 @@ export interface ProjectScript {
   branch?: string
   cmd: string
   cwd?: string
+  scriptName?: string
+  scriptRemark?: string
 }
 
 export interface ProjectDetail {

@@ -25,6 +25,31 @@ function resolveScriptPath(command, cwd) {
     return path.resolve(cwd || process.cwd(), candidate);
 }
 
+function resolveScriptName(name, cwd) {
+    if (typeof name !== 'string' || !name.trim()) {
+        throw new Error('脚本名称不能为空');
+    }
+    const workingDirectory = path.resolve(cwd || process.cwd());
+    const filePath = path.resolve(workingDirectory, name.trim());
+    if (filePath !== workingDirectory && !filePath.startsWith(`${workingDirectory}${path.sep}`)) {
+        throw new Error('脚本必须位于工作目录内');
+    }
+    if (!scriptExtensions.has(path.extname(filePath).toLowerCase())) {
+        throw new Error('脚本名称必须使用 .js/.py/.sh 等脚本扩展名');
+    }
+    return { workingDirectory, filePath };
+}
+
+function buildScriptCommand(name) {
+    const extension = path.extname(name).toLowerCase();
+    if (['.js', '.mjs', '.cjs'].includes(extension)) return `node "${name}"`;
+    if (extension === '.ts') return `tsx "${name}"`;
+    if (extension === '.py') return `python "${name}"`;
+    if (['.sh', '.bash'].includes(extension)) return `bash "${name}"`;
+    if (extension === '.ps1') return `powershell -ExecutionPolicy Bypass -File "${name}"`;
+    return `call "${name}"`;
+}
+
 export function createControlRouter({ configContext, logger, runner, storagePaths, loadConfig, reloadConfig, frontendDistPath, frontendIndexFilePath }) {
     const router = express.Router();
 
@@ -113,6 +138,30 @@ export function createControlRouter({ configContext, logger, runner, storagePath
         } catch (error) {
             logger.error('update script failed', { message: error.message });
             return res.status(400).json({ message: error.message || '无法保存脚本文件' });
+        }
+    });
+
+    router.post('/api/scripts/create', (req, res) => {
+        const { name, cwd, content } = req.body || {};
+        if (typeof content !== 'string') {
+            return res.status(400).json({ message: 'content is required' });
+        }
+        try {
+            const { workingDirectory, filePath } = resolveScriptName(name, cwd);
+            if (fs.existsSync(filePath)) {
+                return res.status(409).json({ message: `脚本已存在: ${filePath}` });
+            }
+            fs.mkdirSync(workingDirectory, { recursive: true });
+            fs.writeFileSync(filePath, content, 'utf8');
+            logger.info('script created from api', { file: filePath });
+            return res.status(201).json({
+                status: 'ok',
+                path: filePath,
+                command: buildScriptCommand(name.trim()),
+            });
+        } catch (error) {
+            logger.error('create script failed', { message: error.message });
+            return res.status(400).json({ message: error.message || '无法创建脚本文件' });
         }
     });
 

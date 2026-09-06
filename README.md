@@ -2,7 +2,7 @@
 
 基于配置驱动的自动化任务执行系统
 
-基于 Node.js + Express 的 WebHook 服务，支持接收 Gitee WebHook 请求并按配置触发脚本。附带 Vue 3 前端管理控制台。
+支持接收 Gitee WebHook 请求并按配置触发构建脚本，附带 Vue 3 前端管理控制台。
 
 ## 技术栈
 
@@ -17,7 +17,7 @@
 
 ## 环境要求
 
-- **Node.js** >= 18（建议 20+）
+- **Node.js** >= 18
 - **pnpm** >= 8
 
 安装 pnpm：
@@ -160,16 +160,24 @@ CONTROL_API_PORT=19000 pnpm start
         {
           "event": "push",
           "branch": "main",
-          "cmd": "要执行的命令",
-          "cwd": "工作目录"
+          "cmd": "node \"deploy.mjs\"",
+          "cwd": "脚本所在的工作目录",
+          "scriptName": "deploy.mjs",
+          "scriptRemark": "部署生产环境"
         }
       ]
     }
-  ]
+  ],
+  "autoSave": {
+    "enabled": true,
+    "delayMs": 1000
+  }
 }
 ```
 
-配置保存后会自动热更新，无需重启服务。
+`scripts` 中的构建脚本文件位于对应脚本映射的 `cwd` 工作目录下。配置编辑页可以直接创建和编辑脚本文件，创建时会根据扩展名生成执行命令，并显示脚本名称和备注。删除脚本映射需要确认，删除映射不会删除磁盘上的脚本文件。
+
+`autoSave.enabled` 控制配置页自动保存，`autoSave.delayMs` 表示用户停止操作后的等待时间，单位为毫秒，默认 1000。自动保存成功后前端会显示提示，配置保存后会自动热更新，无需重启服务。
 
 ## 后端 API 参考
 
@@ -189,6 +197,9 @@ CONTROL_API_PORT=19000 pnpm start
 | POST   | `/api/jobs/trigger`   | 手动触发任务       |
 | GET    | `/api/config`         | 读取当前配置       |
 | PUT    | `/api/config`         | 保存配置并热更新   |
+| POST   | `/api/scripts/read`   | 读取工作目录下的构建脚本 |
+| POST   | `/api/scripts/create` | 创建工作目录下的构建脚本 |
+| PUT    | `/api/scripts`        | 保存构建脚本内容     |
 | GET    | `/api/logs?limit=200` | 读取日志           |
 | GET    | `/api/config/export`  | 导出配置文件       |
 | GET    | `/api/logs/export`    | 导出日志文件       |
@@ -199,13 +210,22 @@ CONTROL_API_PORT=19000 pnpm start
 | 路由      | 页面       | 功能                                         |
 | --------- | ---------- | -------------------------------------------- |
 | `/`       | 仪表盘     | 项目概览、统计信息、手动触发任务             |
-| `/config` | 配置编辑   | 表单编辑 / 原始 JSON 编辑、配置导出          |
+| `/config` | 配置编辑   | 表单编辑 / 原始 JSON 编辑、构建脚本创建与编辑、自动保存、配置导出 |
 | `/logs`   | 日志查看   | 按级别过滤、JSON 格式化展示                  |
 
 ## 目前支持的事件
 
 - `push`
 - `pull_request_merge`
+
+
+
+## 日志
+
+Winston 的级别是**优先级系统**，默认顺序（从低到高）：`error` < `warn` < `info` < `http` < `verbose` < `debug` < `silly`。
+设置 `level: 'info'` 时，会记录 `info` 及**更高优先级**（即更严重）的级别（`warn`、`error`），而不会记录 `debug` 或 `silly`。
+
+
 
 ## 安全建议
 
@@ -214,3 +234,63 @@ CONTROL_API_PORT=19000 pnpm start
 3. 不要在配置中写入敏感的明文信息
 4. 控制端口仅绑定 `127.0.0.1`，不要暴露到公网
 5. 建议在反向代理（Nginx / Caddy）后面运行，启用 HTTPS
+
+
+
+## 常见问题
+
+### 脚本执行权限被拒绝
+
+```sh
+1|WebHook  | 2026-09-04T09:59:29.129Z info: job queued {"jobId":"1788515969122-f5cb","repo":"wygkhcsc/git_test","branch":"master","event":"push","action":"push","ip":"106.13.250.88"}
+1|WebHook  | 2026-09-04T09:59:29.132Z info: command finished {"jobId":"1788515969122-f5cb","code":126,"stdout":"","stderr":"/bin/sh: line 1: /root/git_test/start.sh: Permission denied\n"}
+```
+
+#### 解决方案
+
+执行
+
+```sh
+ls -l script.sh
+```
+
+查看是否有`x`位
+
+没有则执行
+
+```sh
+chmod +x script.sh
+```
+
+
+
+
+
+## 测试记录
+
+测试仓库:
+
+```sh
+https://gitee.com/wygkhcsc/git_test.git
+```
+
+
+
+### push正常测试
+
+步骤：
+
+1. 本地执行一次push
+2. 远程脚本被执行
+
+### 服务器与gitee仓库存在冲突
+
+步骤：
+
+1. 对服务器上的`git_test`中的内容进行修改
+2. 客户端修改`git_test`中的文件内容
+3. 客户端推送内容到`gitee`
+4. `webhook_server`日志显示error错误
+
+
+

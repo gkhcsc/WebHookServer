@@ -110,18 +110,6 @@ onMounted(loadData)
 
 <template>
   <div class="page">
-    <!-- ── Hero ── -->
-    <section class="hero">
-      <div>
-        <h1>WebHook 控制台</h1>
-        <p class="hero-subtitle">管理 Gitee WebHook 项目配置、手动触发任务、查看运行日志</p>
-      </div>
-      <div class="hero-badge">
-        <span class="hero-status" />
-        <span>系统运行中</span>
-      </div>
-    </section>
-
     <!-- ── Stat cards ── -->
     <section class="stats" v-loading="loading">
       <el-card v-for="card in statCards" :key="card.label" shadow="hover" class="stat-card">
@@ -257,11 +245,10 @@ onMounted(loadData)
         <el-table :data="selectedProject.scripts" stripe empty-text="该项目暂无脚本映射">
           <el-table-column prop="event" label="事件" width="180" />
           <el-table-column prop="branch" label="分支" width="120" />
-          <el-table-column prop="cmd" label="执行命令" min-width="240">
+          <el-table-column label="构建脚本" min-width="240">
             <template #default="scope">
-              <code style="font-size: 12px; background: #f3f5f9; padding: 2px 6px; border-radius: 4px;">
-                {{ scope.row.cmd }}
-              </code>
+              <div>{{ scope.row.scriptName || scope.row.cmd }}</div>
+              <small v-if="scope.row.scriptRemark">{{ scope.row.scriptRemark }}</small>
             </template>
           </el-table-column>
           <el-table-column prop="cwd" label="工作目录" min-width="200" />

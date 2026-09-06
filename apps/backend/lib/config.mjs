@@ -47,6 +47,14 @@ function normalizeProjects(projects = []) {
     }));
 }
 
+function normalizeAutoSave(autoSave = {}) {
+    const delayMs = Number(autoSave.delayMs);
+    return {
+        enabled: autoSave.enabled !== false,
+        delayMs: Number.isFinite(delayMs) ? Math.max(300, Math.min(delayMs, 60000)) : 1000,
+    };
+}
+
 // Validate required config fields
 function validateConfig(config) {
     if (!config.server || typeof config.server !== 'object') {
@@ -73,6 +81,7 @@ export function loadConfig(customPath = defaultConfigPath, options = {}) {
     const configDir = path.dirname(resolvedPath);
 
     const config = {
+        autoSave: normalizeAutoSave(parsed.autoSave),
         server: normalizeServer(parsed.server),
         projects: normalizeProjects(parsed.projects),
         logging: normalizeLogging(parsed.logging, {
